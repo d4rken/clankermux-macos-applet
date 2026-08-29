@@ -5,17 +5,32 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var preferences: Preferences
 
+    /// The URL is edited locally and committed on Return or on leaving the field. Writing it per
+    /// keystroke would reconnect on every character, dropping the cached data and polling
+    /// half-typed hostnames.
+    @State private var apiURLDraft: String
+    @FocusState private var apiURLFocused: Bool
+
+    init(preferences: Preferences) {
+        self.preferences = preferences
+        _apiURLDraft = State(initialValue: preferences.apiURL)
+    }
+
     var body: some View {
         Form {
             Section("Clankermux API") {
-                TextField(
-                    "Server URL (hostname or IP address)",
-                    text: Binding(
-                        get: { preferences.apiURL }, set: { preferences.apiURL = $0 })
-                )
-                .help(
-                    "Base URL of Clankermux's public widget API, for example http://127.0.0.1:8080 or http://clankermux.example.test:8080"
-                )
+                TextField("Server URL (hostname or IP address)", text: $apiURLDraft)
+                    .focused($apiURLFocused)
+                    .onSubmit { commitAPIURL() }
+                    .onChange(of: apiURLFocused) { focused in
+                        if !focused { commitAPIURL() }
+                    }
+                    .onChange(of: preferences.apiURL) { url in
+                        if !apiURLFocused { apiURLDraft = url }
+                    }
+                    .help(
+                        "Base URL of Clankermux's public widget API, for example http://127.0.0.1:8080 or http://clankermux.example.test:8080"
+                    )
                 Text(
                     "The app reads Clankermux's unauthenticated, read-only /public/v1 status, accounts, and runway endpoints. Enter a complete HTTP or HTTPS URL above; hostnames and IP addresses are both supported."
                 )
@@ -92,6 +107,11 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .frame(minHeight: 460)
+    }
+
+    private func commitAPIURL() {
+        guard apiURLDraft != preferences.apiURL else { return }
+        preferences.apiURL = apiURLDraft
     }
 }
 

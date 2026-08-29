@@ -71,8 +71,9 @@ http://127.0.0.1:8080
 ```
 
 Click the menu bar item and choose **Settings…** to enter a different hostname, IP address, or
-complete HTTP/HTTPS URL. The settings window also controls the polling interval, request timeout,
-menu bar bars, runway warning duration, and scoped-limit visibility.
+complete HTTP/HTTPS URL. The server URL applies when you press Return or leave the field, so a
+half-typed hostname is never polled. The settings window also controls the polling interval, request
+timeout, menu bar bars, runway warning duration, and scoped-limit visibility.
 
 ## API and security
 
