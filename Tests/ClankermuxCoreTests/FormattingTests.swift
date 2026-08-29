@@ -20,6 +20,16 @@ struct FormattingTests {
         #expect(Formatting.formatDuration(14 * 24 * 3_600_000) == "14d")
     }
 
+    /// `horizonMs`, `ageMs` and the reset countdowns come off the wire, where any finite number
+    /// passes schema validation, including magnitudes that no `Int` can hold.
+    @Test("an out-of-range duration saturates instead of trapping")
+    func outOfRangeDuration() {
+        #expect(
+            Formatting.formatDuration(1e300)
+                == Formatting.formatDuration(.greatestFiniteMagnitude))
+        #expect(Formatting.formatDuration(-1e300) == "<1m")
+    }
+
     @Test("timestamps render as local wall-clock time")
     func timestampPattern() {
         var components = DateComponents()

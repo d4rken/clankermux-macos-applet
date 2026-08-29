@@ -583,10 +583,10 @@ public enum UsageModel {
         }
 
         // An explicit null is treated as a missing count and falls back to the derived value.
-        let configured = finite(status?.pool?.configured).map { Int($0) } ?? mapped.count
+        let configured = finite(status?.pool?.configured).map { clampedInt($0) } ?? mapped.count
         let derivedRoutable = mapped.filter { $0.state.key == .available }.count
         let defaultRoutable =
-            finite(status?.pool?.defaultRoutable).map { Int($0) } ?? derivedRoutable
+            finite(status?.pool?.defaultRoutable).map { clampedInt($0) } ?? derivedRoutable
 
         let runwayNow = runwayView(
             runway: runway,
@@ -627,13 +627,13 @@ func nonEmpty(_ value: String?) -> String? {
 /// A count reported by the server, floored at zero and defaulting to zero when unreadable.
 func count(_ value: Double?) -> Int {
     guard let value, value.isFinite else { return 0 }
-    return Int(max(0, value))
+    return clampedInt(max(0, value))
 }
 
 /// A server-reported number that is passed through as-is, defaulting to zero when unreadable.
 func numberOrZero(_ value: Double?) -> Int {
     guard let value, value.isFinite else { return 0 }
-    return Int(value)
+    return clampedInt(value)
 }
 
 func finite(_ value: Double?) -> Double? {

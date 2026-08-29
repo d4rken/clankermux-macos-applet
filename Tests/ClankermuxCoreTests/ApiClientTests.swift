@@ -195,6 +195,36 @@ struct ApiClientTests {
         }
     }
 
+    /// Every one of these numbers passes schema validation; only the magnitude is abnormal. The
+    /// `Double` to `Int` narrowing would otherwise trap on each refresh, on wire data alone.
+    @Test("out-of-range counts saturate instead of trapping")
+    func outOfRangeCounts() async throws {
+        let client = makeClient()
+        StubURLProtocol.set(
+            path: "/public/v1/status",
+            body: """
+                {"schema": "clankermux.public.status.v1",
+                 "pool": {"configured": 1e300, "defaultRoutable": 1e30, "paused": -1e300,
+                          "rateLimited": 1e30, "usageExhausted": 0},
+                 "usage": {"fiveHour": {"meanUtilizationPct": 50,
+                                        "contributingAccountCount": 1e300,
+                                        "unknownAccountCount": 1e30}}}
+                """
+        )
+        let status = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
+        let view = UsageModel.buildView(
+            accounts: Fixtures.accounts(), status: status, runway: nil, options: ViewOptions(),
+            localNow: Fixtures.now)
+
+        #expect(view.pool.configured == Int.max)
+        #expect(view.pool.defaultRoutable == Int.max)
+        #expect(view.pool.paused == Int.min)
+        #expect(view.pool.rateLimited == Int.max)
+        #expect(view.usagePools[0].accountCount == Int.max)
+        #expect(view.usagePools[0].unknownCount == Int.max)
+        #expect(view.usagePools[0].usedPercent == 50)
+    }
+
     @Test("a wrong schema is rejected rather than rendered as an empty view")
     func rejectsWrongSchema() async throws {
         let client = makeClient()

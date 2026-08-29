@@ -1,5 +1,20 @@
 import Foundation
 
+/// A server-reported `Double` narrowed to `Int`, saturating at the integer bounds.
+///
+///     clampedInt(1e300) == Int.max
+///     clampedInt(-1e300) == Int.min
+///     clampedInt(.nan) == 0
+///
+/// `Int(_:)` traps on any finite value beyond the integer range, and these magnitudes arrive
+/// straight off the wire, so an absurd count would abort the app on every refresh.
+func clampedInt(_ value: Double) -> Int {
+    guard value.isFinite else { return 0 }
+    if value >= Double(Int.max) { return .max }
+    if value <= Double(Int.min) { return .min }
+    return Int(value)
+}
+
 /// Compact, locale-independent renderings of the durations, instants and status strings that the
 /// panel and popup display.
 public enum Formatting {
@@ -12,7 +27,7 @@ public enum Formatting {
     /// Minutes are rounded; hours and days are floored.
     public static func formatDuration(_ milliseconds: Double) -> String {
         guard milliseconds.isFinite else { return "<1m" }
-        var minutes = Int(max(0, (milliseconds / 60_000).rounded()))
+        var minutes = clampedInt(max(0, (milliseconds / 60_000).rounded()))
         if minutes < 1 { return "<1m" }
         if minutes < 60 { return "\(minutes)m" }
         let hours = minutes / 60
