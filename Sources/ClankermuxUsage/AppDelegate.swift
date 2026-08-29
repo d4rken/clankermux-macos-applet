@@ -17,16 +17,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popoverModel: PopoverModel?
     private var cancellables = Set<AnyCancellable>()
     private var latestSnapshot: RefreshSnapshot?
-    private var lastPopoverClose: Date?
     private var connectionChange: Task<Void, Never>?
+
+    /// Set only when the popover closes because of a mouse-down on the status button, and consumed
+    /// by the mouse-up that follows it, so that one click does not close and reopen the popover.
+    /// Any other dismissal, such as Escape or a click elsewhere, leaves it false and the next click
+    /// on the button opens the popover again.
+    private var suppressNextStatusOpen = false
 
     /// A click that opens the popover refreshes only if the data is older than this.
     private static let openRefreshThreshold: TimeInterval = 15
-
-    /// A transient popover dismisses itself on the mouse-down that lands on the status button,
-    /// which is outside it, while the button's action only runs on the following mouse-up. A click
-    /// arriving within this window of a close is that same click and must not reopen the popover.
-    private static let reopenSuppressionWindow: TimeInterval = 0.2
 
     override init() {
         let preferences = Preferences()
@@ -199,14 +199,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - Actions
 
     @objc private func statusItemClicked() {
-        let wasShown = popover.isShown
-        if wasShown {
+        if popover.isShown {
             popover.performClose(nil)
             return
         }
-        if let lastPopoverClose,
-            Date().timeIntervalSince(lastPopoverClose) < Self.reopenSuppressionWindow
-        {
+        if suppressNextStatusOpen {
+            suppressNextStatusOpen = false
             return
         }
         guard let button = statusItem?.button else { return }
@@ -221,8 +219,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    func popoverDidClose(_ notification: Notification) {
-        lastPopoverClose = Date()
+    /// Runs before the close animation, unlike `popoverDidClose`, so the flag is already set when
+    /// the button's action fires on the mouse-up of the very click that dismissed the popover.
+    func popoverWillClose(_ notification: Notification) {
+        suppressNextStatusOpen = Self.isStatusButtonMouseDown(
+            NSApp.currentEvent, button: statusItem?.button)
+    }
+
+    private static func isStatusButtonMouseDown(_ event: NSEvent?, button: NSStatusBarButton?)
+        -> Bool
+    {
+        guard let event, let button, event.type == .leftMouseDown, event.window === button.window
+        else { return false }
+        return button.bounds.contains(button.convert(event.locationInWindow, from: nil))
     }
 
     private func refreshNow() {
