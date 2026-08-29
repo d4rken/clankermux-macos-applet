@@ -179,13 +179,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             // cannot outlive the change and be applied afterwards.
             let baseURL = preferences.apiURL
             let timeout = TimeInterval(preferences.requestTimeout)
-            // Chained rather than independent, because separately created tasks reach the
+            // The reconfigurations are chained, because separately created tasks reach the
             // coordinator in arrival order, so an older URL could be applied after a newer one and
             // leave the app polling the wrong server.
             let previous = connectionChange
-            connectionChange = Task { [coordinator] in
+            let change = Task { [coordinator] in
                 await previous?.value
                 await coordinator.reconfigure(baseURL: baseURL, timeout: timeout)
+            }
+            connectionChange = change
+            // The refresh runs outside that chain, so a change made while an earlier refresh is
+            // still waiting on a slow server applies immediately instead of after that timeout.
+            // The coordinator discards the older refresh once the newer reconfiguration lands.
+            Task { [coordinator] in
+                await change.value
                 await coordinator.refresh(forceRunway: true)
             }
         case .refreshInterval:
