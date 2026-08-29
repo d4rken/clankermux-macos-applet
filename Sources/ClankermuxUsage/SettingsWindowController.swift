@@ -120,12 +120,13 @@ struct SettingsView: View {
 /// An `.accessory` app has no application menu, so the SwiftUI `Settings` scene would have nothing
 /// to open it from.
 @MainActor
-final class SettingsWindowController {
+final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let preferences: Preferences
     private var window: NSWindow?
 
     init(preferences: Preferences) {
         self.preferences = preferences
+        super.init()
     }
 
     func show() {
@@ -139,10 +140,19 @@ final class SettingsWindowController {
             window.title = "Clankermux Usage Settings"
             window.contentView = NSHostingView(rootView: SettingsView(preferences: preferences))
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.center()
             self.window = window
         }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// AppKit keeps a text field's field editor as first responder across a close, so closing the
+    /// window would otherwise produce no focus change and drop an uncommitted URL edit. Ending
+    /// editing here runs the field's commit-on-focus-loss path while the window is still open.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.makeFirstResponder(nil)
+        return true
     }
 }
