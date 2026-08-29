@@ -87,11 +87,15 @@ struct ApiClientTests {
         StubURLProtocol.set(path: "/public/v1/accounts", body: Fixtures.accountsJSON)
 
         let response = try await client.fetchAccounts(baseURL: baseURL, timeout: 5)
-        #expect(response.accounts?.count == 2)
+        #expect(response.accounts?.count == 3)
         #expect(response.accounts?[0].windows?.count == 3)
         #expect(response.accounts?[0].windows?[0].prediction?.predictedUtilizationAtResetPct == 95)
-        #expect(response.accounts?[1].windows?[0].utilizationPct == nil)
-        #expect(response.accounts?[1].windows?[0].resetsAt.instant == nil)
+        #expect(response.accounts?[1].availability?.reason == "queueing")
+        #expect(response.accounts?[1].credential?.state == "refreshable")
+        #expect(response.accounts?[1].measurementState == "stale")
+        #expect(response.accounts?[1].windows?[0].prediction?.lowConfidence == true)
+        #expect(response.accounts?[2].windows?[0].utilizationPct == nil)
+        #expect(response.accounts?[2].windows?[0].resetsAt.instant == nil)
     }
 
     @Test("decodes the runway payload")

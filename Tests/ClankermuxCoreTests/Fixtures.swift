@@ -349,6 +349,44 @@ enum Fixtures {
               ]
             },
             {
+              "id": "account-b",
+              "name": "Account B",
+              "provider": "anthropic",
+              "isDefaultCandidate": false,
+              "availability": {
+                "state": "rate_limited", "reason": "queueing",
+                "availableAt": "2026-08-24T12:30:00.000Z"
+              },
+              "credential": { "state": "refreshable", "expiresAt": null },
+              "measurementState": "stale",
+              "usageObservedAt": "2026-08-24T11:20:00.000Z",
+              "utilizationPct": 100,
+              "windows": [
+                {
+                  "kind": "five_hour", "scopeId": null, "label": "5-hour",
+                  "utilizationPct": 10, "observedAt": "2026-08-24T11:20:00.000Z",
+                  "resetsAt": "2026-08-24T14:00:00.000Z",
+                  "prediction": {
+                    "predictedUtilizationAtResetPct": 100,
+                    "exhaustsAt": "2026-08-24T13:45:00.000Z",
+                    "willExhaustBeforeReset": true,
+                    "lowConfidence": true,
+                    "state": "rising"
+                  }
+                },
+                {
+                  "kind": "seven_day", "scopeId": null, "label": "Weekly",
+                  "utilizationPct": 80, "observedAt": "2026-08-24T11:20:00.000Z",
+                  "resetsAt": "2026-08-25T03:00:00.000Z", "prediction": null
+                },
+                {
+                  "kind": "weekly_scoped", "scopeId": "fable", "label": "Fable",
+                  "utilizationPct": 100, "observedAt": "2026-08-24T11:20:00.000Z",
+                  "resetsAt": "2026-08-25T03:00:00.000Z", "prediction": null
+                }
+              ]
+            },
+            {
               "id": "account-c",
               "name": "Account C",
               "provider": "codex",
