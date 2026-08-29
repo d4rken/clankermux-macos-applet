@@ -25,10 +25,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// on the button opens the popover again.
     private var suppressNextStatusOpen = false
 
-    /// Installed while `suppressNextStatusOpen` is set, so that a click ending outside the button
-    /// still clears it. AppKit fires no button action in that case, so nothing would consume it.
-    private var suppressionClearMonitor: Any?
-
     /// A click that opens the popover refreshes only if the data is older than this.
     private static let openRefreshThreshold: TimeInterval = 15
 
@@ -235,23 +231,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func popoverWillClose(_ notification: Notification) {
         suppressNextStatusOpen = Self.isStatusButtonMouseDown(
             NSApp.currentEvent, button: statusItem?.button)
-        guard suppressNextStatusOpen, suppressionClearMonitor == nil else { return }
-        suppressionClearMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) {
-            [weak self] event in
-            // Clearing is deferred so that a mouse-up on the button still reaches
-            // `statusItemClicked` and consumes the flag before this block runs.
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.endStatusOpenSuppression() }
-            }
-            return event
-        }
-    }
-
-    private func endStatusOpenSuppression() {
-        suppressNextStatusOpen = false
-        guard let monitor = suppressionClearMonitor else { return }
-        suppressionClearMonitor = nil
-        NSEvent.removeMonitor(monitor)
     }
 
     private static func isStatusButtonMouseDown(_ event: NSEvent?, button: NSStatusBarButton?)
