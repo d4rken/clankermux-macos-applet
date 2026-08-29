@@ -142,6 +142,9 @@ Behaviour is otherwise identical. These are deliberate:
    That is a coercion accident rather than intent, so this port falls back to the derived account
    count instead.
 9. **`NSAllowsArbitraryLoads` is set**, as described above.
+10. **A non-2xx response always reports its HTTP status and reason.** The applet parses the body
+    before it checks the status, so an error page that is not JSON reports a JSON parse error
+    instead of the status line. This port checks the status first and only decodes a 2xx body.
 
 ## License
 

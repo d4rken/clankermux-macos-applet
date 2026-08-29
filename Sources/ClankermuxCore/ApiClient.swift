@@ -129,13 +129,14 @@ public struct URLSessionApiClient: ApiClientProtocol {
             throw ApiError.transport(error.localizedDescription)
         }
 
-        // An unreadable body outranks the status code, so a 500 that is not JSON reports the body
-        // problem rather than hiding it behind the status line.
-        guard let decoded = try? JSONDecoder().decode(T.self, from: data) else {
-            throw ApiError.unexpectedResponse(label: label)
-        }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw Self.httpError(http)
+        }
+
+        // Only a 2xx body reaches the decoder, so a failure here is a malformed payload rather
+        // than an error page that was never meant to be JSON.
+        guard let decoded = try? JSONDecoder().decode(T.self, from: data) else {
+            throw ApiError.unexpectedResponse(label: label)
         }
         return decoded
     }

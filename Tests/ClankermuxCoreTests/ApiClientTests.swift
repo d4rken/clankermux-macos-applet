@@ -244,6 +244,25 @@ struct ApiClientTests {
         }
     }
 
+    @Test("a non-2xx response reports its status even when the body is not JSON")
+    func httpErrorWithNonJSONBody() async throws {
+        let client = makeClient()
+        StubURLProtocol.set(
+            path: "/public/v1/status", statusCode: 500,
+            body: "<html><body><h1>500 Internal Server Error</h1></body></html>")
+        do {
+            _ = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
+            Issue.record("expected an HTTP failure")
+        } catch let error as ApiError {
+            guard case .http(let status, _) = error else {
+                Issue.record("expected an HTTP error, got \(error)")
+                return
+            }
+            #expect(status == 500)
+            #expect(error.userMessage.hasPrefix("HTTP 500: "))
+        }
+    }
+
     @Test("a body that is not JSON is reported as an unexpected response")
     func malformedJSON() async throws {
         let client = makeClient()
