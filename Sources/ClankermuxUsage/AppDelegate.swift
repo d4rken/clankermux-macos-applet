@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var latestSnapshot: RefreshSnapshot?
     private var lastPopoverClose: Date?
+    private var connectionChange: Task<Void, Never>?
 
     /// A click that opens the popover refreshes only if the data is older than this.
     private static let openRefreshThreshold: TimeInterval = 15
@@ -178,7 +179,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             // cannot outlive the change and be applied afterwards.
             let baseURL = preferences.apiURL
             let timeout = TimeInterval(preferences.requestTimeout)
-            Task { [coordinator] in
+            // Chained rather than independent, because separately created tasks reach the
+            // coordinator in arrival order, so an older URL could be applied after a newer one and
+            // leave the app polling the wrong server.
+            let previous = connectionChange
+            connectionChange = Task { [coordinator] in
+                await previous?.value
                 await coordinator.reconfigure(baseURL: baseURL, timeout: timeout)
                 await coordinator.refresh(forceRunway: true)
             }
