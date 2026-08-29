@@ -5,7 +5,7 @@ import SwiftUI
 
 /// Owns the status item, the popover, the single refresh coordinator and the poll timer.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let preferences: Preferences
     private let scheduler: any PollScheduling
     private let coordinator: RefreshCoordinator
@@ -17,9 +17,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popoverModel: PopoverModel?
     private var cancellables = Set<AnyCancellable>()
     private var latestSnapshot: RefreshSnapshot?
+    private var lastPopoverClose: Date?
 
     /// A click that opens the popover refreshes only if the data is older than this.
     private static let openRefreshThreshold: TimeInterval = 15
+
+    /// A transient popover dismisses itself on the mouse-down that lands on the status button,
+    /// which is outside it, while the button's action only runs on the following mouse-up. A click
+    /// arriving within this window of a close is that same click and must not reopen the popover.
+    private static let reopenSuppressionWindow: TimeInterval = 0.2
 
     override init() {
         let preferences = Preferences()
@@ -71,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         self.popoverModel = popoverModel
         popover.behavior = .transient
+        popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: PopoverView(
                 model: popoverModel,
@@ -191,6 +198,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.performClose(nil)
             return
         }
+        if let lastPopoverClose,
+            Date().timeIntervalSince(lastPopoverClose) < Self.reopenSuppressionWindow
+        {
+            return
+        }
         guard let button = statusItem?.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
@@ -201,6 +213,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if stale {
             Task { [coordinator] in await coordinator.refresh() }
         }
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        lastPopoverClose = Date()
     }
 
     private func refreshNow() {
