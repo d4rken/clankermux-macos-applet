@@ -120,7 +120,7 @@ runnable in a headless test process. `ClankermuxUsage` holds the AppKit and Swif
 
 ## Differences from the Cinnamon applet
 
-Behaviour is otherwise identical. These are deliberate:
+Behaviour is otherwise identical. All but the last of these are deliberate:
 
 1. **The polling-source watchdog is not ported.** Its defences are specific to GJS: a thrown poll
    callback permanently killing a repeating GLib source, and timer sources disappearing out from
@@ -146,6 +146,10 @@ Behaviour is otherwise identical. These are deliberate:
 10. **A non-2xx response always reports its HTTP status and reason.** The applet parses the body
     before it checks the status, so an error page that is not JSON reports a JSON parse error
     instead of the status line. This port checks the status first and only decodes a 2xx body.
+11. **Releasing a click away from the menu bar item can swallow the next click.** Pressing the item
+    while the popover is open and then letting go somewhere else leaves the following click on the
+    item without effect, and a second click opens it again. This is a known limitation of this
+    version rather than intended behaviour.
 
 ## License
 
