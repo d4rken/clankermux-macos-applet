@@ -22,6 +22,13 @@ struct PopoverViewTests {
         #expect(size.width <= 460)
     }
 
+    @Test("a six-account popover, the shape of a real server, still fits a laptop screen")
+    func realisticSixAccountsFit() {
+        let size = fittingSize(accounts: 6)
+        // The cap on a 14-inch MacBook Pro is 912 points: 944 visible, less room for the arrow.
+        #expect(size.height <= PopoverMetrics.maxHeight(screenVisibleHeight: 944))
+    }
+
     @Test("the popover grows with account count rather than clipping")
     func growsWithContent() {
         let small = fittingSize(accounts: 1)
@@ -39,7 +46,42 @@ struct PopoverViewTests {
         #expect(PopoverMetrics.maxHeight(screenVisibleHeight: 0) >= PopoverMetrics.minimumHeight)
     }
 
+    @Test("content that fits builds no scroll view, so no scroller can be drawn")
+    func fittingContentHasNoScrollView() {
+        // macOS draws a persistent scroller whenever a mouse is attached, so a ScrollView that is
+        // never scrolled still shows a bar. Not building one is the only way to be sure.
+        let host = hosted(accounts: 2, maxHeight: 4000)
+        #expect(!containsScrollView(host))
+    }
+
+    @Test("content that overflows does build a scroll view")
+    func overflowingContentScrolls() {
+        let host = hosted(accounts: 6, maxHeight: 200)
+        #expect(containsScrollView(host))
+    }
+
     // MARK: - Helpers
+
+    private func containsScrollView(_ view: NSView) -> Bool {
+        if view is NSScrollView { return true }
+        return view.subviews.contains(where: containsScrollView)
+    }
+
+    @discardableResult
+    private func hosted(accounts count: Int, maxHeight: CGFloat) -> NSHostingView<PopoverView> {
+        let model = PopoverModel(
+            content: detail(accounts: count), isRefreshing: false, canOpenDashboard: true,
+            maxContentHeight: maxHeight)
+        let host = NSHostingView(
+            rootView: PopoverView(
+                model: model, onRefresh: {}, onOpenDashboard: {}, onOpenSettings: {}, onQuit: {}))
+        host.frame = NSRect(x: 0, y: 0, width: PopoverMetrics.width, height: maxHeight)
+        host.layoutSubtreeIfNeeded()
+        // The scroll decision runs on a preference update, so let the run loop deliver it.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        host.layoutSubtreeIfNeeded()
+        return host
+    }
 
     private func fittingSize(accounts count: Int) -> CGSize {
         let model = PopoverModel(

@@ -193,6 +193,14 @@ struct AccountBlockView: View {
 
 // MARK: - Popover
 
+/// Carries the measured height of the popover's sections up to the container.
+private struct ContentHeightKey: SwiftUI.PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct PopoverView: View {
     @ObservedObject var model: PopoverModel
     let onRefresh: () -> Void
@@ -200,10 +208,30 @@ struct PopoverView: View {
     let onOpenSettings: () -> Void
     let onQuit: () -> Void
 
+    /// Measured height of the sections, used to decide whether a scroll view is needed at all.
+    @State private var contentHeight: CGFloat = 0
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 7) {
+            // Only wrap in a ScrollView when the content genuinely will not fit. macOS shows a
+            // persistent scroller whenever a mouse is attached, so a ScrollView that is never
+            // scrolled still draws a bar, which is the thing this is meant to avoid.
+            if contentHeight > model.maxContentHeight {
+                ScrollView { sections }
+                    .frame(height: model.maxContentHeight)
+            } else {
+                sections
+            }
+
+            Divider()
+
+            footer
+        }
+        .frame(width: PopoverMetrics.width)
+    }
+
+    private var sections: some View {
+        VStack(alignment: .leading, spacing: 7) {
                     if let placeholder = model.content.placeholder {
                         InfoBlockView(block: placeholder)
                     }
@@ -229,14 +257,22 @@ struct PopoverView: View {
                     if let error = model.content.errorNotice {
                         Card { InfoBlockView(block: error) }
                     }
-                }
-                .padding(10)
+        }
+        .padding(10)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: ContentHeightKey.self, value: proxy.size.height)
             }
-            .frame(maxHeight: model.maxContentHeight)
+        )
+        .onPreferenceChange(ContentHeightKey.self) { height in
+            // The measurement is of the sections themselves, identical in both branches, so
+            // switching between them cannot feed back into the measurement and oscillate.
+            if height != contentHeight { contentHeight = height }
+        }
+    }
 
-            Divider()
-
-            HStack(spacing: 4) {
+    private var footer: some View {
+        HStack(spacing: 4) {
                 Button(action: onRefresh) {
                     Label(
                         model.isRefreshing ? "Refreshing…" : "Refresh",
@@ -253,11 +289,9 @@ struct PopoverView: View {
                 // explicit control.
                 iconButton("power", help: "Quit Clankermux Usage", action: onQuit)
             }
-            .controlSize(.small)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-        }
-        .frame(width: PopoverMetrics.width)
+        .controlSize(.small)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
     }
 
     private func iconButton(_ symbol: String, help: String, action: @escaping () -> Void)
