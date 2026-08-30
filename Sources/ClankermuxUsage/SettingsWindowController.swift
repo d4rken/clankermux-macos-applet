@@ -166,7 +166,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// window would otherwise produce no focus change and drop an uncommitted URL edit. Ending
     /// editing here runs the field's commit-on-focus-loss path while the window is still open.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.makeFirstResponder(nil)
+        endEditing(in: sender)
         return true
+    }
+
+    /// The same problem as closing, reached a different way. Clicking the menu bar item or another
+    /// application leaves the field focused, so without this a typed URL is silently discarded and
+    /// the app keeps polling the previous server, which looks exactly like the new address being
+    /// rejected.
+    func windowDidResignKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        endEditing(in: window)
+    }
+
+    /// Drops first responder, which is what drives the form's commit-on-focus-loss path.
+    func endEditing(in window: NSWindow) {
+        window.makeFirstResponder(nil)
     }
 }
