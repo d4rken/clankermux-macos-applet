@@ -217,6 +217,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             return
         }
         guard let button = statusItem?.button else { return }
+        // Cap the popover to the screen it will actually appear on, so it scrolls only when the
+        // content will not fit that display rather than at a fixed threshold.
+        popoverModel?.maxContentHeight = PopoverMetrics.maxHeight(
+            screenVisibleHeight: (button.window?.screen ?? NSScreen.main)?.visibleFrame.height
+                ?? PopoverMetrics.minimumHeight)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
 
