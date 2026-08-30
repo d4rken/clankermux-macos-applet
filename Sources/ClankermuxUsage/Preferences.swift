@@ -1,3 +1,4 @@
+import ClankermuxCore
 import Combine
 import Foundation
 
@@ -8,6 +9,7 @@ enum PreferenceKey: String, Sendable, CaseIterable {
     case requestTimeout = "request-timeout"
     case panelBarWidth = "panel-bar-width"
     case showPanelPercentages = "show-panel-percentages"
+    case menuBarContent = "menu-bar-content"
     case runwayWarningHours = "runway-warning-hours"
     case showScopedLimits = "show-scoped-limits"
     case defaultCandidateFirst = "default-candidate-first"
@@ -32,6 +34,7 @@ final class Preferences: ObservableObject {
         PreferenceKey.requestTimeout.rawValue: 8,
         PreferenceKey.panelBarWidth.rawValue: 52,
         PreferenceKey.showPanelPercentages.rawValue: true,
+        PreferenceKey.menuBarContent.rawValue: PanelDisplay.icon.rawValue,
         PreferenceKey.runwayWarningHours.rawValue: 72,
         PreferenceKey.showScopedLimits.rawValue: true,
         PreferenceKey.defaultCandidateFirst.rawValue: true,
@@ -70,6 +73,16 @@ final class Preferences: ObservableObject {
     var showPanelPercentages: Bool {
         get { store.bool(forKey: PreferenceKey.showPanelPercentages.rawValue) }
         set { write(.showPanelPercentages, newValue) }
+    }
+
+    /// Defaults to the icon. The wider forms need menu bar room that a populated bar may not have,
+    /// and macOS draws nothing at all rather than truncating an item that does not fit.
+    var menuBarContent: PanelDisplay {
+        get {
+            PanelDisplay(rawValue: store.string(forKey: PreferenceKey.menuBarContent.rawValue) ?? "")
+                ?? .icon
+        }
+        set { write(.menuBarContent, newValue.rawValue) }
     }
 
     var runwayWarningHours: Int {

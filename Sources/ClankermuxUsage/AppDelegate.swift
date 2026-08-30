@@ -48,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             accounts: nil, status: nil, runway: nil, options: viewOptions(), localNow: now)
         let panel = PanelContent.make(
             state: .notLoaded, view: view, lastError: "", lastRunwayError: "", lastSuccess: nil,
-            now: now)
+            display: preferences.menuBarContent, now: now)
         let detail = DetailContent.make(
             state: .notLoaded, view: view, baseURL: preferences.apiURL, lastError: "",
             lastRunwayError: "", lastSuccess: nil, now: now)
@@ -136,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             lastError: rendered.lastError,
             lastRunwayError: rendered.lastRunwayError,
             lastSuccess: rendered.lastSuccess,
+            display: preferences.menuBarContent,
             now: now
         )
         panelView?.update(
@@ -197,7 +198,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             }
         case .refreshInterval:
             scheduler.reschedule(intervalSeconds: TimeInterval(preferences.refreshInterval))
-        case .panelBarWidth, .showPanelPercentages, .runwayWarningHours, .showScopedLimits,
+        case .panelBarWidth, .showPanelPercentages, .menuBarContent, .runwayWarningHours,
+            .showScopedLimits,
             .defaultCandidateFirst:
             if let latestSnapshot { render(latestSnapshot) }
         }

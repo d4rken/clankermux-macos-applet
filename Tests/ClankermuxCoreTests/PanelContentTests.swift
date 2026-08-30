@@ -157,6 +157,63 @@ struct PanelContentTests {
         #expect(content.tooltip.contains("Spark: 0% mean usage across 1 accounts"))
     }
 
+    // The item is about 435 points wide with meters, which does not fit a menu bar already holding
+    // a normal number of status items, and macOS draws nothing at all when an item has no room.
+    @Test("runway mode omits the meters")
+    func runwayModeOmitsMeters() {
+        let content = make(
+            accounts: Fixtures.accounts(), status: Fixtures.status(), runway: Fixtures.runway(),
+            display: .runway)
+        #expect(content.meters.isEmpty)
+        #expect(!content.showsEmptyPlaceholder)
+    }
+
+    @Test("runway mode leaves the headline and tooltip untouched")
+    func runwayModeKeepsHeadline() {
+        let shown = make(
+            accounts: Fixtures.accounts(), status: Fixtures.status(), runway: Fixtures.runway(),
+            display: .full)
+        let hidden = make(
+            accounts: Fixtures.accounts(), status: Fixtures.status(), runway: Fixtures.runway(),
+            display: .runway)
+        #expect(hidden.runwayText == shown.runwayText)
+        #expect(hidden.runwaySeverity == shown.runwaySeverity)
+        #expect(hidden.tooltip == shown.tooltip)
+        #expect(!shown.meters.isEmpty)
+    }
+
+    @Test("icon mode draws a symbol and no text")
+    func iconModeIsSymbolOnly() {
+        let content = make(
+            accounts: Fixtures.accounts(), status: Fixtures.status(), runway: Fixtures.runway(),
+            display: .icon)
+        #expect(content.iconOnly)
+        #expect(content.runwayText.isEmpty)
+        #expect(content.meters.isEmpty)
+        #expect(!content.showsEmptyPlaceholder)
+        // The state still has to be legible from the tint alone.
+        #expect(content.runwaySeverity == .warning)
+    }
+
+    @Test("icon mode keeps the tooltip, which is where the detail goes")
+    func iconModeKeepsTooltip() {
+        let icon = make(
+            accounts: Fixtures.accounts(), status: Fixtures.status(), runway: Fixtures.runway(),
+            display: .icon)
+        let full = make(
+            accounts: Fixtures.accounts(), status: Fixtures.status(), runway: Fixtures.runway(),
+            display: .full)
+        #expect(icon.tooltip == full.tooltip)
+    }
+
+    @Test("nothing loaded in icon mode is a muted symbol, not placeholder text")
+    func iconModeLoadingIsMuted() {
+        let content = make(accounts: nil, status: nil, runway: nil, display: .icon)
+        #expect(content.iconOnly)
+        #expect(content.runwayText.isEmpty)
+        #expect(content.runwayIsMuted)
+    }
+
     // MARK: - Helpers
 
     private func pool(configured: Double, defaultRoutable: Double) -> PoolInfo {
@@ -178,7 +235,8 @@ struct PanelContentTests {
         runway: RunwayResponse?,
         lastError: String = "",
         lastRunwayError: String = "",
-        lastSuccess: Date? = nil
+        lastSuccess: Date? = nil,
+        display: PanelDisplay = .full
     ) -> PanelContent {
         let view = UsageModel.buildView(
             accounts: accounts,
@@ -193,6 +251,7 @@ struct PanelContentTests {
             lastError: lastError,
             lastRunwayError: lastRunwayError,
             lastSuccess: lastSuccess,
+            display: display,
             now: Fixtures.now
         )
     }

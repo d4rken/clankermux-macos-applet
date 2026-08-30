@@ -12,6 +12,7 @@ final class PanelItemView: NSView {
     private static let barHeight: CGFloat = 8
     private static let barCornerRadius: CGFloat = 4
     private static let horizontalInset: CGFloat = 6
+    private static let iconSide: CGFloat = 15
 
     private var content: PanelContent
     private var barWidth: CGFloat
@@ -53,9 +54,30 @@ final class PanelItemView: NSView {
                 string.draw(at: NSPoint(x: x, y: midY - size.height / 2))
             case .bar(let percent, let severity):
                 draw(bar: percent, severity: severity, x: x, midY: midY)
+            case .icon:
+                draw(iconAt: x, midY: midY)
             }
             x += segment.width
         }
+    }
+
+    private func draw(iconAt x: CGFloat, midY: CGFloat) {
+        let color =
+            content.runwayIsMuted ? NSColor.secondaryLabelColor : content.runwaySeverity.accentColor
+        let rect = NSRect(
+            x: x, y: midY - Self.iconSide / 2, width: Self.iconSide, height: Self.iconSide)
+        guard let image = Self.icon else {
+            // No symbol available: fall back to a filled dot so the item is never blank.
+            color.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 3, dy: 3)).fill()
+            return
+        }
+        let tinted = image.copy() as! NSImage
+        tinted.isTemplate = true
+        tinted.size = NSSize(width: Self.iconSide, height: Self.iconSide)
+        tinted.draw(in: rect)
+        color.set()
+        rect.fill(using: .sourceAtop)
     }
 
     private func draw(bar percent: Int, severity: Severity, x: CGFloat, midY: CGFloat) {
@@ -80,6 +102,7 @@ final class PanelItemView: NSView {
         enum Kind {
             case text(NSAttributedString)
             case bar(percent: Int, severity: Severity)
+            case icon
         }
 
         let kind: Kind
@@ -87,7 +110,23 @@ final class PanelItemView: NSView {
         let leading: CGFloat
     }
 
+    /// The symbol drawn in icon mode. The first name the running system knows wins, so the view
+    /// degrades on older systems instead of drawing nothing.
+    private static let iconCandidates = ["gauge", "speedometer", "chart.bar.fill"]
+
+    private static var icon: NSImage? {
+        for name in iconCandidates {
+            if let image = NSImage(systemSymbolName: name, accessibilityDescription: "Clankermux") {
+                return image
+            }
+        }
+        return nil
+    }
+
     private func segments() -> [Segment] {
+        if content.iconOnly {
+            return [Segment(kind: .icon, width: Self.iconSide, leading: 0)]
+        }
         var segments: [Segment] = []
         let runwayColor =
             content.runwayIsMuted ? NSColor.secondaryLabelColor : content.runwaySeverity.accentColor

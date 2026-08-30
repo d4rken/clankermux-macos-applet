@@ -1,3 +1,4 @@
+import ClankermuxCore
 import Combine
 import Foundation
 import Testing
@@ -19,6 +20,8 @@ struct PreferencesTests {
         #expect(preferences.requestTimeout == 8)
         #expect(preferences.panelBarWidth == 52)
         #expect(preferences.showPanelPercentages)
+        // The icon is the only form guaranteed to fit a populated menu bar.
+        #expect(preferences.menuBarContent == .icon)
         #expect(preferences.runwayWarningHours == 72)
         #expect(preferences.showScopedLimits)
         #expect(preferences.defaultCandidateFirst)

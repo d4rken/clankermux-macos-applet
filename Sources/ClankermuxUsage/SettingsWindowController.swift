@@ -1,4 +1,5 @@
 import AppKit
+import ClankermuxCore
 import SwiftUI
 
 /// The settings form, in the same two groups as the Cinnamon `settings-schema.json`.
@@ -58,7 +59,20 @@ struct SettingsView: View {
                 )
             }
 
-            Section("Panel") {
+            Section("Menu bar") {
+                Picker(
+                    "Menu bar shows",
+                    selection: Binding(
+                        get: { preferences.menuBarContent },
+                        set: { preferences.menuBarContent = $0 })
+                ) {
+                    Text("Icon only").tag(PanelDisplay.icon)
+                    Text("Runway").tag(PanelDisplay.runway)
+                    Text("Runway and pool meters").tag(PanelDisplay.full)
+                }
+                .help(
+                    "The icon is about 24 points wide, the runway about 106, and the full panel about 435. macOS draws nothing at all rather than truncating an item it has no room for, so on a busy menu bar the wider forms can disappear entirely. The popover always shows everything."
+                )
                 Stepper(
                     "Width of each panel progress bar: \(preferences.panelBarWidth) points",
                     value: Binding(

@@ -7,20 +7,34 @@ A native macOS menu bar app for monitoring the accounts behind a
 [Cinnamon panel applet](https://github.com/d4rken/clankermux-mint-applet): same data sources, same
 panel content, same popup detail, same settings and defaults.
 
-The menu bar leads with Clankermux's projected quota runway, followed by server-computed mean
-utilization for the 5-hour, 7-day, and model-specific quota pools. For example:
+The menu bar shows a gauge tinted by state, green above the configured runway warning duration,
+orange below it, and red when the pool is out of quota or nothing is routable. Under Settings the
+item can instead show Clankermux's projected quota runway:
+
+```text
+R 5d 18h
+```
+
+or the runway followed by server-computed mean utilization for the 5-hour, 7-day and
+model-specific quota pools:
 
 ```text
 R 5d 18h  5h [  5%]  7d [ 49%]  Fable [ 67%]
 ```
+
+The icon is about 24 points wide, the runway about 106, and the full panel about 435. macOS gives a
+status item no room it has not got and draws nothing at all rather than truncating, so on a busy
+menu bar the wider forms can vanish entirely, which is why the icon is the default. Whichever form
+is showing, the tooltip and the popover carry the full detail.
 
 When availability is degraded, the default-context account count appears as an exception beside the
 runway, for example `R 18h · 3/4!`. It stays out of the normal display because runway describes
 quota capacity while availability also includes pauses, cooldowns, credentials, and provider
 overloads.
 
-Unused model-specific quota families are omitted from the menu bar to conserve space, but remain
-available in the popover. Core 5-hour and 7-day meters remain visible at 0%.
+When the meters are switched on, unused model-specific quota families are omitted from the menu bar
+to conserve space, but remain available in the popover. Core 5-hour and 7-day meters remain visible
+at 0%.
 
 Each percentage is the unweighted mean reported by Clankermux across accounts that supplied that
 window. The popover shows contributor and unknown-account counts so a partial mean cannot pass as
@@ -73,7 +87,7 @@ http://127.0.0.1:8080
 Click the menu bar item and choose **Settings…** to enter a different hostname, IP address, or
 complete HTTP/HTTPS URL. The server URL applies when you press Return or leave the field, so a
 half-typed hostname is never polled. The settings window also controls the polling interval, request
-timeout, menu bar bars, runway warning duration, and scoped-limit visibility.
+timeout, the menu bar meters, runway warning duration, and scoped-limit visibility.
 
 ## API and security
 
@@ -101,6 +115,7 @@ leaves your machine.
 | Server URL | `http://127.0.0.1:8080` | |
 | Refresh every | 30 seconds | 10 to 900, in steps of 10 |
 | Request timeout | 8 seconds | 2 to 60 |
+| Menu bar shows | Icon only | Icon only, Runway, or Runway and pool meters |
 | Width of each menu bar progress bar | 52 points | 30 to 100, in steps of 2 |
 | Show percentages beside menu bar bars | on | |
 | Warn when quota runway falls below | 72 hours | 1 to 336 |
@@ -146,7 +161,12 @@ Behaviour is otherwise identical. All but the last of these are deliberate:
 10. **A non-2xx response always reports its HTTP status and reason.** The applet parses the body
     before it checks the status, so an error page that is not JSON reports a JSON parse error
     instead of the status line. This port checks the status first and only decodes a 2xx body.
-11. **Releasing a click away from the menu bar item can swallow the next click.** Pressing the item
+11. **The menu bar shows an icon by default, not the panel.** A Cinnamon panel has room for the
+    runway and every pool meter side by side. The same content is about 435 points wide, and a
+    macOS menu bar holding a normal set of status items may have as little as 20 points to spare,
+    with macOS drawing nothing at all rather than truncating. The runway and the full panel are
+    therefore opt-in, and the tooltip and popover always carry the detail.
+12. **Releasing a click away from the menu bar item can swallow the next click.** Pressing the item
     while the popover is open and then letting go somewhere else leaves the following click on the
     item without effect, and a second click opens it again. This is a known limitation of this
     version rather than intended behaviour.
