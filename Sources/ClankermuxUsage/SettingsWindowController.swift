@@ -102,7 +102,7 @@ struct SettingsView: View {
                     Text("Weekly usage").tag(PanelDisplay.usage)
                 }
                 .help(
-                    "Stacked pace bars show the server's guidance until the next weekly reset in the narrowest form. Weekly usage averages each provider's weekly percentages with equal weight per account, and needs more room; macOS may hide a status item that does not fit. The popover always shows full detail."
+                    "Stacked pace bars show the server's guidance until the next weekly reset in the narrowest form. Weekly usage averages each provider's weekly percentages with equal weight per account, and needs more room; macOS may hide a status item that does not fit. Coverage, reset checkpoints and evidence ages are in the tooltip in both modes."
                 )
             }
 
