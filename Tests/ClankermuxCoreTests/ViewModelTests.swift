@@ -121,6 +121,29 @@ struct ViewModelTests {
         #expect(row.availabilityText.hasPrefix("Stale availability"))
     }
 
+    @Test("the popover summary line carries pace, exhaustion and coverage on one row")
+    func summaryLine() {
+        let rows = view(Fixtures.workloads()).workloads
+        #expect(
+            rows[0].summaryLine == "Claude: Weekly risk · −25% ~2h · 2/2 modeled")
+        // A conservative bound is named once, in the parenthetical, not twice.
+        #expect(rows[2].summaryLine.contains("−25% (bound)"))
+        #expect(!rows[2].summaryLine.contains("bound bound"))
+        #expect(rows[2].availabilityCount == "2")
+
+        // A stale reading withholds the pace clause and the exhaustion estimate.
+        let stale = view(Fixtures.workloads(), now: Fixtures.now.addingTimeInterval(180)).workloads
+        #expect(stale[0].summaryLine == "Claude: Stale · Last reading: Weekly risk · 2/2 modeled")
+        #expect(stale[0].availabilityCount == "stale")
+
+        // Counts that do not add up describe no real split, so the coverage text is withheld.
+        var payload = Fixtures.workloads()
+        payload.workloads?[0].weekly?.coverage?.idleAccounts = 3
+        let broken = view(payload).workloads[0]
+        #expect(!broken.coverageValid)
+        #expect(!broken.summaryLine.contains("/2 modeled"))
+    }
+
     @Test("partial forecasts describe the modeled subset and retain disjoint coverage")
     func partialCoverage() {
         var payload = Fixtures.workloads()

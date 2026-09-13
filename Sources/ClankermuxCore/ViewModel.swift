@@ -2,6 +2,15 @@ import Foundation
 
 public enum Severity: String, Sendable, Equatable, CaseIterable {
     case normal, warning, critical, unknown
+
+    /// The shared utilization thresholds, used by every readable percentage the app shows.
+    ///
+    ///     utilization(79)  == .normal
+    ///     utilization(80)  == .warning
+    ///     utilization(100) == .critical
+    public static func utilization(_ percent: Int) -> Severity {
+        percent >= 100 ? .critical : percent >= 80 ? .warning : .normal
+    }
 }
 
 public enum StateKey: String, Sendable, Equatable {
@@ -31,6 +40,21 @@ public struct WorkloadRow: Sendable, Equatable, Identifiable {
     public let detail: String
     public let availabilityText: String
     public let freshnessText: String
+    /// The projected exhaustion instant, set only while it falls inside the current period.
+    public let exhaustsAt: Date?
+    public let limited: Bool
+    /// Whether the coverage counts add up, so `coverageText` describes a real split.
+    public let coverageValid: Bool
+    public let coverageEligible: Int?
+    public let qualification: String?
+    /// Availability as a count rather than a sentence.
+    ///
+    ///     "3"      three accounts available
+    ///     "3 + ?"  three available, more of unknown state
+    ///     "stale"  counted, but the reading aged out
+    public let availabilityCount: String
+    /// The single-line rendering of this row, built by `UsageModel.forecastSummary`.
+    public internal(set) var summaryLine: String = ""
 }
 
 public struct UsageView: Sendable, Equatable {
@@ -72,8 +96,10 @@ public enum UsageModel {
         var seen = Set<String>()
         let mapped = rows.compactMap { raw -> WorkloadRow? in
             guard let id = nonEmpty(raw.id), seen.insert(id).inserted else { return nil }
-            return workloadRow(
+            var row = workloadRow(
                 raw, all: workloads?.workloads ?? [], now: localNow, failed: workloadsFailed)
+            row.summaryLine = forecastSummary(row, now: localNow)
+            return row
         }
         return UsageView(
             now: localNow,
@@ -210,6 +236,13 @@ public enum UsageModel {
                 "Next reset checkpoint: \(expired ? "expired" : Formatting.formatReset(deadline, now: now))"
             )
         }
+        let coverageCounts = [
+            coverage?.eligibleAccounts, coverage?.modeledAccounts, coverage?.idleAccounts,
+            coverage?.learningAccounts, coverage?.unavailableAccounts,
+        ].map(wholeCount)
+        let coverageValid =
+            !coverageCounts.contains { $0 == nil }
+            && coverageCounts[0]! == coverageCounts.dropFirst().reduce(0) { $0 + $1! }
         var coverageParts = [
             "\(countText(coverage?.modeledAccounts))/\(countText(coverage?.eligibleAccounts)) modeled"
         ]
@@ -245,6 +278,32 @@ public enum UsageModel {
             available +=
                 " · recovery \(recovery <= now ? "due" : Formatting.formatReset(recovery, now: now))"
         }
+        let availabilityCounts = [
+            availability?.availableAccounts, availability?.constrainedAccounts,
+            availability?.unknownAccounts,
+        ].map(wholeCount)
+        let availabilityCount: String
+        if availability == nil || availabilityCounts.contains(where: { $0 == nil })
+            || availability?.context != "fresh_unpinned_nominal"
+        {
+            availabilityCount = "unavailable"
+        } else if availabilityStale {
+            availabilityCount = "stale"
+        } else {
+            availabilityCount =
+                "\(clampedInt(availabilityCounts[0]!))"
+                + (availabilityCounts[2]! > 0 ? " + ?" : "")
+        }
+
+        // An exhaustion the server projects at or after the reset is not an exhaustion inside this
+        // period, so it is not an ETA the summary can show.
+        var projectedExhaustion: Date?
+        if weekly?.outcome == "exhausts_before_end", let exhausts = weekly?.exhaustsAt.instant,
+            let deadline, exhausts < deadline
+        {
+            projectedExhaustion = exhausts
+        }
+
         let freshness =
             "Weekly computed \(ageText(weekly?.computedAt.instant, now: now)) · evidence \(ageText(weekly?.evidenceObservedAt.instant, now: now))\nAvailability computed \(ageText(availability?.computedAt.instant, now: now))"
         return WorkloadRow(
@@ -252,7 +311,48 @@ public enum UsageModel {
             signal: signal, stale: stale, expired: expired, summary: summary,
             coverageText: coverageText,
             detail: details.joined(separator: "\n"), availabilityText: available,
-            freshnessText: freshness)
+            freshnessText: freshness,
+            exhaustsAt: projectedExhaustion,
+            limited: weekly?.quality == "limited" && periodValid && coverageValid
+                && ["exhausted", "exhausts_before_end", "lasts_until_end"].contains(
+                    weekly?.outcome),
+            coverageValid: coverageValid, coverageEligible: coverageCounts[0].map(clampedInt),
+            qualification: weekly?.pace?.qualification, availabilityCount: availabilityCount)
+    }
+
+    /// A server-reported count as the contract requires it: whole and non-negative.
+    static func wholeCount(_ value: Double?) -> Double? {
+        guard let value, value.isFinite, value >= 0, value == value.rounded(.towardZero) else {
+            return nil
+        }
+        return value
+    }
+
+    /// The popover's one-line summary of a workload.
+    ///
+    ///     "Claude: Weekly risk · −25% ~2h · 2/2 modeled"
+    public static func forecastSummary(_ row: WorkloadRow, now: Date) -> String {
+        var text = "\(row.label): \(row.summary)"
+        if row.signal.numeric {
+            // The signal already spells out a conservative bound; the parenthetical replaces it
+            // rather than repeating it.
+            let suffix = " bound"
+            let pace =
+                row.signal.value.hasSuffix(suffix)
+                ? String(row.signal.value.dropLast(suffix.count)) : row.signal.value
+            text += " · \(pace)\(row.qualification == "conservative_bound" ? " (bound)" : "")"
+        }
+        if !row.stale, !row.expired, let exhausts = row.exhaustsAt {
+            text +=
+                exhausts <= now
+                ? " ~now"
+                : " ~\(Formatting.formatDuration(exhausts.timeIntervalSince(now) * 1000))"
+        }
+        if row.limited { text += " · limited" }
+        if row.coverageValid, let eligible = row.coverageEligible, eligible > 0 {
+            text += " · \(row.coverageText)"
+        }
+        return text
     }
 
     static func accountBlock(
@@ -293,8 +393,7 @@ public enum UsageModel {
             let stale = failed || account.measurementState == "stale"
             let expired = window.resetsAt.instant.map { $0 <= now } ?? false
             var severity: Severity =
-                stale || expired || percent == nil
-                ? .unknown : percent! >= 100 ? .critical : percent! >= 80 ? .warning : .normal
+                stale || expired || percent == nil ? .unknown : .utilization(percent!)
             let forecast = window.forecast
             var forecastText: String
             switch forecast?.outcome {
