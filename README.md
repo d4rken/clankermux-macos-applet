@@ -7,40 +7,45 @@ A native macOS menu bar app for monitoring a
 follow the [Linux Mint applet](https://github.com/d4rken/clankermux-mint-applet),
 using the current public workload API introduced in Clankermux 2026.9.36.
 
-The menu bar can show an icon, compact pace bars, or full-size directional workload bars:
+The menu bar shows one of two forms:
 
 ```text
-Claude [ cut | add ]  GPT [ cut | add ]  Fable [ cut | add ]
+C [ cut | add ]        stacked pace bars
+GPT 62%  Claude 48%    weekly usage
 ```
 
-Bars extend left for a reduction in consumption and right for an increase.
-Each half represents a 50% change. These are pace estimates from the server,
-not remaining quota percentages or a suggested number of agents.
+**Stacked pace bars** is the default and the narrower form: up to three bars
+stacked vertically with a workload initial beside each, using 52 points for
+three workloads. Additional workloads start another stack. Bars extend left for
+a reduction in consumption and right for an increase, each half representing a
+50% change. These are pace estimates from the server, not remaining quota
+percentages or a suggested number of agents. **Stale** and **Expired** stay
+visible as text.
 
-The icon remains the default because macOS may hide status items that do not
-fit the menu bar. **Compact pace bars** stack up to three bars vertically,
-with a workload initial beside each bar, using 52 points for three workloads.
-Additional workloads start another stack. Full names remain in the tooltip
-and popup. **Full-size pace bars** use the
-Linux-style label-and-bar layout. Exact percentages are optional in full-size
-mode; the tooltip and popover always show them. **Stale** and **Expired** remain
-visible in both bar modes.
+**Weekly usage** draws a provider mark and the weekly percentage for each
+workload, averaged across that provider's accounts with equal weight per
+account. Accounts without a readable percentage are left out of the average
+rather than counted as zero, and a `*` marks a partial or cached reading.
+Paused accounts still count, because their quota is still spent. macOS may hide
+a status item that does not fit the menu bar, and this form needs roughly 180
+points for three workloads.
 
-The popup uses a 620-point-wide layout with workload outlook and pacing on one
-row, availability and coverage on the next, and account forecasts beside their
-usage bars. Click a workload's chevron to expand its forecast details.
-Paused accounts show only their heading and status, without quota bars or forecasts.
-Menu-bar workloads are hidden when all accounts for their provider are paused.
-They reappear after an account resumes; rate-limited or exhausted accounts remain visible.
+Full names, coverage, reset checkpoints and the caveats are in the tooltip in
+both forms.
+
+The popup uses a 620-point-wide layout: one workload summary line each, with
+availability counts on the right, then account forecasts beside their usage
+bars. Paused accounts show only their heading and status, without quota bars or
+forecasts. Menu-bar pace bars are hidden when all accounts for their provider
+are paused. They reappear after an account resumes; rate-limited or exhausted
+accounts remain visible.
 
 Click the item for:
 
-- workload weekly outlook, pace estimates, and the next reset checkpoint
-- current availability, independently of weekly subscription budget
-- modeled, idle, learning, and unreadable forecast coverage
-- account risk counts and conservative family bounds
+- one line per workload: weekly outlook, pace estimate, exhaustion estimate, and coverage
+- how many accounts can serve a request right now, independently of weekly budget
 - per-account availability, credentials, usage bars, and window forecasts
-- computation and evidence ages, cached readings, and failed-feed notices
+- cached readings and failed-feed notices
 - refresh, dashboard, settings, and quit actions
 
 ## Reading the pace bars
@@ -82,8 +87,9 @@ make app
 ```
 
 The default server is `http://127.0.0.1:8080`. Use **Settings…** to enter
-another HTTP or HTTPS URL, hostname, or IP address. The URL applies when you
-press Return or leave the field.
+another HTTP or HTTPS URL, hostname, or IP address. The address applies when you
+press Return or leave the field. Settings flags an address the app cannot use
+before you leave the field, and reports what the last poll found under it.
 
 ## API and refresh behavior
 
@@ -109,10 +115,15 @@ stale after three minutes, on a failed fetch, or when their computation
 timestamp is missing. Cached readings stay in the popover, clearly marked.
 The oldest usage observation is shown separately from computation age.
 
+Weekly usage staleness is judged against the `/accounts` reply's own
+`generatedAt`, advanced by the time since it arrived, so a client clock skewed
+against the server's does not mark fresh readings cached.
+
 This version replaces the retired runway, pacing, and headroom feeds.
 It requires the current workload contract; it does not fall back to
-quota averages or removed endpoints. Saved “Runway” mode becomes “Compact pace bars”;
-the retired runway-warning and default-routing-candidate settings are removed.
+quota averages or removed endpoints. Saved “Runway”, “Icon only” and
+“Full-size pace bars” modes become “Stacked pace bars”; the retired pace-bar
+width and percentage settings are removed.
 
 Account names are public in this API. Credentials, prompts, and response bodies
 are not exposed. The app performs no server writes.
@@ -125,14 +136,10 @@ Use HTTPS when traffic leaves your machine.
 | Setting | Default | Range |
 | --- | --- | --- |
 | Server URL | `http://127.0.0.1:8080` | |
-| Refresh accounts/status | 30 seconds | 10 to 900, in steps of 10 |
+| Refresh accounts and status | 30 seconds | 10 to 900, in steps of 10 |
 | Request timeout | 8 seconds | 2 to 60 |
-| Menu bar shows | Icon only | Icon, Compact pace bars, Full-size pace bars |
-| Width of each full-size pace bar | 52 points | 30 to 100, in steps of 2 |
-| Show percentages beside full-size bars | off | |
-| Show model-specific limits | on | |
-
-Existing saved percentage preferences are preserved.
+| Menu bar shows | Stacked pace bars | Stacked pace bars, Weekly usage |
+| Show model-family indicators and utilization bars | on | |
 
 ## Development
 
@@ -146,6 +153,14 @@ The Foundation-only core handles API decoding, presentation rules, and refresh
 coordination. AppKit draws the menu bar; SwiftUI renders the popover and settings.
 Tests cover the proxy's published JSON examples, freshness and deadline behavior,
 retry scheduling, partial request failures, and offscreen UI layout.
+
+## Provider marks
+
+The OpenAI and Anthropic marks come from the Linux Mint applet, which took them
+from the Clankermux dashboard's `provider-marks.tsx`, sourced there from Simple
+Icons (CC0-1.0). Brand marks remain trademarks of their respective owners. The
+Fable F monogram is a local identifier, not an official brand mark. The same
+notice ships inside the app bundle as `ProviderMarks-ATTRIBUTION.md`.
 
 ## License
 
