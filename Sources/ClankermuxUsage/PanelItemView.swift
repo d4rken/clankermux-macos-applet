@@ -1,50 +1,44 @@
 import AppKit
 import ClankermuxCore
 
-/// Draws the menu bar item: one directional pace meter per workload.
+/// Draws the menu bar item: either one directional pace meter per workload, or one weekly usage
+/// percentage per provider.
 ///
 /// This is content only. The hosting `NSStatusBarButton` stays the event owner, so clicks,
 /// highlighting and accessibility keep working.
 @MainActor
 final class PanelItemView: NSView {
+    typealias MarkProvider = @MainActor (ProviderMark) -> NSImage?
+
     private static let itemSpacing: CGFloat = 10
     private static let meterSpacing: CGFloat = 4
-    private static let barHeight: CGFloat = 8
     private static let barCornerRadius: CGFloat = 4
     private static let horizontalInset: CGFloat = 6
-    private static let iconSide: CGFloat = 15
     private static let compactColumnWidth: CGFloat = 52
     private static let compactRows = 3
 
     private var content: PanelContent
-    private var barWidth: CGFloat
-    private var showsPercentages: Bool
+    private let markProvider: MarkProvider
 
-    init(content: PanelContent, barWidth: CGFloat, showsPercentages: Bool) {
+    init(content: PanelContent, markProvider: @escaping MarkProvider = ProviderMarks.image) {
         self.content = content
-        self.barWidth = barWidth
-        self.showsPercentages = showsPercentages
+        self.markProvider = markProvider
         super.init(frame: .zero)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    func update(content: PanelContent, barWidth: CGFloat, showsPercentages: Bool) {
-        guard
-            self.content != content || self.barWidth != barWidth
-                || self.showsPercentages != showsPercentages
-        else { return }
+    func update(content: PanelContent) {
+        guard self.content != content else { return }
         self.content = content
-        self.barWidth = barWidth
-        self.showsPercentages = showsPercentages
         needsDisplay = true
     }
 
     /// The width the status item has to reserve. An arbitrary subview's `intrinsicContentSize` does
     /// not reliably drive `NSStatusItem.length`, so the delegate sets it from this.
     var fittingWidth: CGFloat {
-        if content.compact && !content.meters.isEmpty {
+        if usesStack {
             let columns = (content.meters.count + Self.compactRows - 1) / Self.compactRows
             return CGFloat(columns) * Self.compactColumnWidth
         }
@@ -54,7 +48,7 @@ final class PanelItemView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        if content.compact && !content.meters.isEmpty {
+        if usesStack {
             drawCompact()
             return
         }
@@ -66,14 +60,14 @@ final class PanelItemView: NSView {
             case .text(let string):
                 let size = string.size()
                 string.draw(at: NSPoint(x: x, y: midY - size.height / 2))
-            case .bar(let percent, let severity):
-                draw(bar: percent, severity: severity, x: x, midY: midY)
-            case .icon:
-                draw(iconAt: x, midY: midY)
+            case .mark(let mark, let fallback):
+                draw(mark: mark, fallback: fallback, x: x, midY: midY)
             }
             x += segment.width
         }
     }
+
+    private var usesStack: Bool { content.display == .compact && !content.meters.isEmpty }
 
     private func drawCompact() {
         for (index, meter) in content.meters.enumerated() {
@@ -111,38 +105,44 @@ final class PanelItemView: NSView {
         }
     }
 
-    private func draw(iconAt x: CGFloat, midY: CGFloat) {
-        let color =
-            content.severity.accentColor
-        let rect = NSRect(
-            x: x, y: midY - Self.iconSide / 2, width: Self.iconSide, height: Self.iconSide)
-        guard let image = Self.icon else {
-            // No symbol available: fall back to a filled dot so the item is never blank.
-            color.setFill()
-            NSBezierPath(ovalIn: rect.insetBy(dx: 3, dy: 3)).fill()
+    /// The mark stays label-coloured whatever the reading says: severity is carried by the value
+    /// beside it, and a red or green brand mark reads as a claim about the provider.
+    private func draw(mark: ProviderMark, fallback: String, x: CGFloat, midY: CGFloat) {
+        let side = ProviderMarks.side
+        let rect = NSRect(x: x, y: midY - side / 2, width: side, height: side)
+        guard let image = markProvider(mark) else {
+            let attributed = NSAttributedString(
+                string: fallback,
+                attributes: [.font: Self.labelFont, .foregroundColor: NSColor.labelColor])
+            let size = attributed.size()
+            attributed.draw(
+                at: NSPoint(x: x + (side - size.width) / 2, y: midY - size.height / 2))
             return
         }
-        let tinted = image.copy() as! NSImage
-        tinted.isTemplate = true
-        tinted.size = NSSize(width: Self.iconSide, height: Self.iconSide)
-        tinted.draw(in: rect)
-        color.set()
+        guard let context = NSGraphicsContext.current?.cgContext else {
+            image.draw(in: rect)
+            return
+        }
+        // The layer starts transparent, so the tint clips to the glyph instead of filling the rect
+        // over whatever the menu bar already drew there.
+        context.beginTransparencyLayer(in: rect, auxiliaryInfo: nil)
+        image.draw(in: rect)
+        NSColor.labelColor.set()
         rect.fill(using: .sourceAtop)
+        context.endTransparencyLayer()
     }
 
     private func draw(
         bar percent: Double, severity: Severity, x: CGFloat, midY: CGFloat,
-        width: CGFloat? = nil, height: CGFloat = PanelItemView.barHeight
+        width: CGFloat, height: CGFloat
     ) {
-        let barWidth = width ?? self.barWidth
-        let track = NSRect(
-            x: x, y: midY - height / 2, width: barWidth, height: height)
+        let track = NSRect(x: x, y: midY - height / 2, width: width, height: height)
         NSColor.tertiaryLabelColor.setFill()
         NSBezierPath(
             roundedRect: track, xRadius: Self.barCornerRadius, yRadius: Self.barCornerRadius
         ).fill()
 
-        let half = barWidth / 2
+        let half = width / 2
         if percent != 0 {
             let width = max(2, half * CGFloat(min(100, abs(percent))) / 100)
             let fill = NSRect(
@@ -160,8 +160,7 @@ final class PanelItemView: NSView {
     private struct Segment {
         enum Kind {
             case text(NSAttributedString)
-            case bar(percent: Double, severity: Severity)
-            case icon
+            case mark(ProviderMark, fallback: String)
         }
 
         let kind: Kind
@@ -169,49 +168,25 @@ final class PanelItemView: NSView {
         let leading: CGFloat
     }
 
-    /// The symbol drawn in icon mode. The first name the running system knows wins, so the view
-    /// degrades on older systems instead of drawing nothing.
-    private static let iconCandidates = ["gauge", "speedometer", "chart.bar.fill"]
-
-    private static var icon: NSImage? {
-        for name in iconCandidates {
-            if let image = NSImage(systemSymbolName: name, accessibilityDescription: "Clankermux") {
-                return image
-            }
-        }
-        return nil
-    }
-
     private func segments() -> [Segment] {
-        if content.iconOnly {
-            return [Segment(kind: .icon, width: Self.iconSide, leading: 0)]
-        }
         var segments: [Segment] = []
-        let headlineColor =
-            content.severity.accentColor
         if !content.headline.isEmpty {
             segments.append(
-                text(content.headline, font: Self.headlineFont, color: headlineColor, leading: 0))
+                text(
+                    content.headline, font: Self.headlineFont,
+                    color: content.severity.accentColor, leading: 0))
         }
 
-        for meter in content.meters {
-            segments.append(
-                text(
-                    meter.label, font: Self.labelFont, color: .labelColor,
-                    leading: segments.isEmpty ? 0 : Self.itemSpacing))
+        for row in content.usageRows {
             segments.append(
                 Segment(
-                    kind: .bar(percent: meter.signal.fill, severity: meter.signal.severity),
-                    width: barWidth,
-                    leading: Self.meterSpacing
-                ))
-            if meter.alwaysShowsValue || showsPercentages && meter.signal.numeric {
-                segments.append(
-                    text(
-                        meter.signal.value, font: Self.percentFont,
-                        color: meter.signal.severity.accentColor,
-                        leading: Self.meterSpacing))
-            }
+                    kind: .mark(row.mark, fallback: String(row.label.prefix(1)).uppercased()),
+                    width: ProviderMarks.side,
+                    leading: segments.isEmpty ? 0 : Self.itemSpacing))
+            segments.append(
+                text(
+                    row.valueText, font: Self.percentFont, color: row.severity.accentColor,
+                    leading: Self.meterSpacing))
         }
         return segments
     }

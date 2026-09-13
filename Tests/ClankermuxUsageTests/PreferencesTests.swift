@@ -18,22 +18,22 @@ struct PreferencesTests {
         #expect(preferences.apiURL == "http://127.0.0.1:8080")
         #expect(preferences.refreshInterval == 30)
         #expect(preferences.requestTimeout == 8)
-        #expect(preferences.panelBarWidth == 52)
-        #expect(!preferences.showPanelPercentages)
-        // The icon is the only form guaranteed to fit a populated menu bar.
-        #expect(preferences.menuBarContent == .icon)
+        // The narrower of the two forms, so a populated menu bar still has room for it.
+        #expect(preferences.menuBarContent == .compact)
         #expect(preferences.showScopedLimits)
     }
 
-    @Test("saved runway display migrates to pace summary")
-    func migratesRunway() {
-        let store = TemporaryDefaults()
-        defer { store.remove() }
-        store.defaults.set("runway", forKey: PreferenceKey.menuBarContent.rawValue)
-        let preferences = Preferences(store: store.defaults)
-        #expect(preferences.menuBarContent == .compact)
-        preferences.menuBarContent = .full
-        #expect(preferences.menuBarContent == .full)
+    @Test("retired display modes fall back to the stacked bars")
+    func migratesRetiredModes() {
+        for saved in ["runway", "icon", "full", "nonsense"] {
+            let store = TemporaryDefaults()
+            defer { store.remove() }
+            store.defaults.set(saved, forKey: PreferenceKey.menuBarContent.rawValue)
+            let preferences = Preferences(store: store.defaults)
+            #expect(preferences.menuBarContent == .compact, "\(saved) should migrate")
+            preferences.menuBarContent = .usage
+            #expect(preferences.menuBarContent == .usage)
+        }
     }
 
     @Test("every schema key is registered")
@@ -51,12 +51,10 @@ struct PreferencesTests {
         defer { store.remove() }
         store.defaults.set(0, forKey: PreferenceKey.refreshInterval.rawValue)
         store.defaults.set(9_000, forKey: PreferenceKey.requestTimeout.rawValue)
-        store.defaults.set(1, forKey: PreferenceKey.panelBarWidth.rawValue)
         let preferences = Preferences(store: store.defaults)
 
         #expect(preferences.refreshInterval == 10)
         #expect(preferences.requestTimeout == 60)
-        #expect(preferences.panelBarWidth == 30)
     }
 
     @Test("writes are clamped before they are stored")
@@ -67,11 +65,9 @@ struct PreferencesTests {
 
         preferences.refreshInterval = 5
         preferences.requestTimeout = 900
-        preferences.panelBarWidth = 400
 
         #expect(store.defaults.integer(forKey: PreferenceKey.refreshInterval.rawValue) == 10)
         #expect(store.defaults.integer(forKey: PreferenceKey.requestTimeout.rawValue) == 60)
-        #expect(store.defaults.integer(forKey: PreferenceKey.panelBarWidth.rawValue) == 100)
     }
 
     @Test("values round-trip through the store")
@@ -81,15 +77,13 @@ struct PreferencesTests {
         let preferences = Preferences(store: store.defaults)
 
         preferences.apiURL = "http://proxy.example.test:8080"
-        preferences.showPanelPercentages = false
         preferences.showScopedLimits = false
-        preferences.panelBarWidth = 64
+        preferences.menuBarContent = .usage
 
         let reopened = Preferences(store: store.defaults)
         #expect(reopened.apiURL == "http://proxy.example.test:8080")
-        #expect(!reopened.showPanelPercentages)
         #expect(!reopened.showScopedLimits)
-        #expect(reopened.panelBarWidth == 64)
+        #expect(reopened.menuBarContent == .usage)
     }
 
     @Test("a change publishes the key that changed")

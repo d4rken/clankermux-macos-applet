@@ -7,8 +7,6 @@ enum PreferenceKey: String, Sendable, CaseIterable {
     case apiURL = "api-url"
     case refreshInterval = "refresh-interval"
     case requestTimeout = "request-timeout"
-    case panelBarWidth = "panel-bar-width"
-    case showPanelPercentages = "show-panel-percentages"
     case menuBarContent = "menu-bar-content"
     case showScopedLimits = "show-scoped-limits"
 }
@@ -23,15 +21,12 @@ final class Preferences: ObservableObject {
     static let defaultAPIURL = "http://127.0.0.1:8080"
     static let refreshIntervalRange = 10...900
     static let requestTimeoutRange = 2...60
-    static let panelBarWidthRange = 30...100
 
     static let registrationDefaults: [String: Any] = [
         PreferenceKey.apiURL.rawValue: defaultAPIURL,
         PreferenceKey.refreshInterval.rawValue: 30,
         PreferenceKey.requestTimeout.rawValue: 8,
-        PreferenceKey.panelBarWidth.rawValue: 52,
-        PreferenceKey.showPanelPercentages.rawValue: false,
-        PreferenceKey.menuBarContent.rawValue: PanelDisplay.icon.rawValue,
+        PreferenceKey.menuBarContent.rawValue: PanelDisplay.compact.rawValue,
         PreferenceKey.showScopedLimits.rawValue: true,
     ]
 
@@ -60,22 +55,14 @@ final class Preferences: ObservableObject {
         set { write(.requestTimeout, newValue.clamped(to: Self.requestTimeoutRange)) }
     }
 
-    var panelBarWidth: Int {
-        get { clamped(.panelBarWidth, to: Self.panelBarWidthRange) }
-        set { write(.panelBarWidth, newValue.clamped(to: Self.panelBarWidthRange)) }
-    }
-
-    var showPanelPercentages: Bool {
-        get { store.bool(forKey: PreferenceKey.showPanelPercentages.rawValue) }
-        set { write(.showPanelPercentages, newValue) }
-    }
-
-    /// Defaults to the icon. The wider forms need menu bar room that a populated bar may not have,
-    /// and macOS draws nothing at all rather than truncating an item that does not fit.
+    /// Defaults to the stacked bars, the narrower of the two forms: macOS draws nothing at all
+    /// rather than truncating a status item that does not fit a populated menu bar.
+    ///
+    /// Retired values, including the saved "runway" mode, land on the same default.
     var menuBarContent: PanelDisplay {
         get {
             let saved = store.string(forKey: PreferenceKey.menuBarContent.rawValue) ?? ""
-            return saved == "runway" ? .compact : PanelDisplay(rawValue: saved) ?? .icon
+            return PanelDisplay(rawValue: saved) ?? .compact
         }
         set { write(.menuBarContent, newValue.rawValue) }
     }
