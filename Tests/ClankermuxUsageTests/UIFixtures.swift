@@ -3,7 +3,10 @@ import Foundation
 @testable import ClankermuxCore
 
 enum UIFixtures {
-    static func snapshot(accounts count: Int = 3) -> RefreshSnapshot {
+    /// `partialCoverage` produces the longest workload summary the popover has to lay out: a
+    /// modeled subset, a disjoint coverage split, and no numeric pace advice.
+    static func snapshot(accounts count: Int = 3, partialCoverage: Bool = false) -> RefreshSnapshot
+    {
         let now = Date()
         let timestamp = FlexibleTimestamp(date: now)
         let reset = FlexibleTimestamp(date: now.addingTimeInterval(86400))
@@ -45,9 +48,13 @@ enum UIFixtures {
                         startsAt: timestamp, endsAt: reset, endReason: "next_weekly_reset"),
                     outcome: pace < 0 ? "exhausts_before_end" : "lasts_until_end",
                     quality: "supported",
-                    coverage: WeeklyCoverage(
-                        eligibleAccounts: 2, modeledAccounts: 2, idleAccounts: 0,
-                        learningAccounts: 0, unavailableAccounts: 0),
+                    coverage: partialCoverage
+                        ? WeeklyCoverage(
+                            eligibleAccounts: 6, modeledAccounts: 3, idleAccounts: 1,
+                            learningAccounts: 1, unavailableAccounts: 1)
+                        : WeeklyCoverage(
+                            eligibleAccounts: 2, modeledAccounts: 2, idleAccounts: 0,
+                            learningAccounts: 0, unavailableAccounts: 0),
                     accountRisk: AccountRisk(
                         spentAccounts: 0, atRiskAccounts: 1, withinBudgetAccounts: 1,
                         unknownAccounts: 0),

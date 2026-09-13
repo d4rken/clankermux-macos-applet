@@ -76,70 +76,55 @@ struct InfoBlockView: View {
     }
 }
 
-struct PaceBar: View {
-    let signal: PaceSignal
+/// A provider mark, or the workload's initial where the running system cannot decode the mark.
+struct ProviderMarkView: View {
+    let mark: ProviderMark?
+    let fallback: String
 
     var body: some View {
-        GeometryReader { geometry in
-            let half = geometry.size.width / 2
-            let width = half * CGFloat(min(100, abs(signal.fill))) / 100
-            ZStack(alignment: .leading) {
-                Capsule().fill(.quaternary)
-                Capsule().fill(signal.severity.accent)
-                    .frame(width: width)
-                    .offset(x: signal.fill < 0 ? half - width : half)
-                Rectangle().fill(.secondary)
-                    .frame(width: 1, height: 10)
-                    .offset(x: half)
+        Group {
+            if let mark, let image = ProviderMarks.image(for: mark) {
+                Image(nsImage: image).renderingMode(.template)
+            } else {
+                Text(fallback).font(.system(size: 11, weight: .semibold))
             }
         }
-        .accessibilityLabel(signal.value)
+        .frame(width: ProviderMarks.side, height: ProviderMarks.side)
     }
 }
 
-struct WorkloadBlockView: View {
-    let row: WorkloadRow
-    @State private var expanded = false
+/// Every workload on one line: what the weekly budget is doing on the left, how many accounts can
+/// serve a request right now on the right.
+struct WorkloadSummaryView: View {
+    let rows: [WorkloadRow]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
-                Button {
-                    expanded.toggle()
-                } label: {
-                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .frame(width: 12)
-                }
-                .buttonStyle(.plain)
-                .help("Forecast details")
-                .accessibilityLabel("Forecast details for " + row.label)
-                .accessibilityValue(expanded ? "Expanded" : "Collapsed")
-                Text(row.label).font(.system(size: 12, weight: .semibold))
-                    .frame(width: 64, alignment: .leading)
-                    .lineLimit(1).help(row.label)
-                Text(row.summary).font(.system(size: 10.5, weight: .medium))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                PaceBar(signal: row.signal).frame(width: 74, height: 7)
-                Text(row.signal.value)
-                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(row.signal.severity.accent)
-                    .frame(width: 115, alignment: .trailing)
+                Text("Weekly until next reset").font(.system(size: 12, weight: .semibold))
+                Spacer(minLength: 8)
+                Text("Available now").font(.system(size: 10.5)).foregroundStyle(.secondary)
             }
-            HStack(alignment: .top, spacing: 12) {
-                Text(row.availabilityText).font(.system(size: 10.5))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(row.coverageText).font(.system(size: 10.5)).foregroundStyle(.secondary)
-            }
-            .padding(.leading, 20)
-            if expanded {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(row.detail).font(.system(size: 10.5))
-                    Text(row.freshnessText).font(.system(size: 9.5))
+            ForEach(rows) { row in
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    ProviderMarkView(
+                        mark: WorkloadRegistry.mark(forKey: row.id),
+                        fallback: String(row.label.prefix(1)).uppercased()
+                    )
+                    .alignmentGuide(.firstTextBaseline) { dimensions in
+                        dimensions[VerticalAlignment.center]
+                    }
+                    Text(row.summaryLine).font(.system(size: 10.5, weight: .medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    // Deliberately uncoloured: this counts accounts that can serve a request now,
+                    // which the weekly pace severity beside it says nothing about.
+                    Text(row.availabilityCount)
+                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .frame(width: 60, alignment: .trailing)
                 }
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 20)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(row.summaryLine). Available now \(row.availabilityCount)")
             }
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -237,21 +222,14 @@ struct PopoverView: View {
             if let header = model.content.header {
                 InfoBlockView(block: header).padding(.horizontal, 2)
             }
-            ForEach(model.content.workloads) { row in
-                Card { WorkloadBlockView(row: row) }
+            if !model.content.workloads.isEmpty {
+                Card { WorkloadSummaryView(rows: model.content.workloads) }
             }
             ForEach(model.content.notices) { notice in
                 Card { InfoBlockView(block: notice) }
             }
             ForEach(model.content.accounts) { account in
                 Card { AccountBlockView(block: account) }
-            }
-            if !model.content.workloads.isEmpty {
-                Text(
-                    "Pace estimates assume the current distribution of consumption across accounts. Availability is for fresh, unpinned, nominal-sized requests; 5-hour limits can interrupt separately."
-                )
-                .font(.system(size: 9.5)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(10)

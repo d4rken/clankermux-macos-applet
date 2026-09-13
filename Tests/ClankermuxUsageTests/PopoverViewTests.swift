@@ -16,9 +16,12 @@ struct PopoverViewTests {
         guard let directory = ProcessInfo.processInfo.environment["CLANKERMUX_PREVIEW_DIR"] else {
             return
         }
-        for (name, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
+        for (name, scheme, partial) in [
+            ("light", ColorScheme.light, false), ("dark", .dark, false),
+            ("long-summary", .light, true),
+        ] {
             let model = PopoverModel(
-                content: detail(accounts: 4), isRefreshing: false,
+                content: detail(accounts: 4, partialCoverage: partial), isRefreshing: false,
                 canOpenDashboard: true, maxContentHeight: 2000)
             let content = PopoverView(
                 model: model, onRefresh: {}, onOpenDashboard: {}, onOpenSettings: {}, onQuit: {}
@@ -38,6 +41,15 @@ struct PopoverViewTests {
             try data.write(
                 to: URL(fileURLWithPath: directory).appendingPathComponent("popover-\(name).png"))
         }
+    }
+
+    @Test("a long workload summary wraps inside the popover rather than being clipped")
+    func longSummaryWraps() {
+        let short = fittingSize(accounts: 4)
+        let long = fittingSize(accounts: 4, partialCoverage: true)
+        #expect(long.width == short.width)
+        #expect(long.height >= short.height)
+        #expect(long.height < 550)
     }
 
     @Test("a four-account popover respects the laptop height cap including its footer")
@@ -109,9 +121,10 @@ struct PopoverViewTests {
         return host
     }
 
-    private func fittingSize(accounts count: Int) -> CGSize {
+    private func fittingSize(accounts count: Int, partialCoverage: Bool = false) -> CGSize {
         let model = PopoverModel(
-            content: detail(accounts: count), isRefreshing: false, canOpenDashboard: true)
+            content: detail(accounts: count, partialCoverage: partialCoverage),
+            isRefreshing: false, canOpenDashboard: true)
         let host = NSHostingView(
             rootView: PopoverView(
                 model: model, onRefresh: {}, onOpenDashboard: {}, onOpenSettings: {}, onQuit: {}))
@@ -119,8 +132,8 @@ struct PopoverViewTests {
         return host.fittingSize
     }
 
-    private func detail(accounts count: Int) -> DetailContent {
-        let snapshot = UIFixtures.snapshot(accounts: count)
+    private func detail(accounts count: Int, partialCoverage: Bool = false) -> DetailContent {
+        let snapshot = UIFixtures.snapshot(accounts: count, partialCoverage: partialCoverage)
         return DetailContent.make(
             snapshot: snapshot, view: snapshot.rendered(options: ViewOptions(), now: Date()),
             now: Date())
