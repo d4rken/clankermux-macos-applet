@@ -133,7 +133,7 @@ struct ViewModelTests {
 
         // A stale reading withholds the pace clause and the exhaustion estimate.
         let stale = view(Fixtures.workloads(), now: Fixtures.now.addingTimeInterval(180)).workloads
-        #expect(stale[0].summaryLine == "Claude: Stale · Last reading: Weekly risk · 2/2 modeled")
+        #expect(stale[0].summaryLine == "Claude: Stale · 2/2 modeled")
         #expect(stale[0].availabilityCount == "stale")
 
         // Counts that do not add up describe no real split, so the coverage text is withheld.

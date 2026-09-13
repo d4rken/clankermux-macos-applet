@@ -36,6 +36,10 @@ public struct WorkloadRow: Sendable, Equatable, Identifiable {
     public let stale: Bool
     public let expired: Bool
     public let summary: String
+    /// The forecast outcome on its own, without the qualifications `summary` folds in.
+    ///
+    ///     "Weekly risk"   "Subset exhausted"   "Stale"
+    public let forecastValueText: String
     public let coverageText: String
     public let detail: String
     public let availabilityText: String
@@ -189,6 +193,22 @@ public enum UsageModel {
             && coverage?.idleAccounts == 0 && coverage?.learningAccounts == 0
             && coverage?.unavailableAccounts == 0
         let subset = complete ? "" : " (modeled subset)"
+        let forecastValueText: String
+        if expired {
+            forecastValueText = "Expired"
+        } else if stale {
+            forecastValueText = "Stale"
+        } else {
+            switch weekly?.outcome {
+            case "no_accounts": forecastValueText = "No active accounts"
+            case "not_applicable": forecastValueText = "No weekly quota"
+            case "exhausted": forecastValueText = complete ? "Weekly exhausted" : "Subset exhausted"
+            case "exhausts_before_end": forecastValueText = complete ? "Weekly risk" : "Subset risk"
+            case "lasts_until_end":
+                forecastValueText = complete ? "Reaches reset" : "Subset reaches reset"
+            default: forecastValueText = "Unavailable"
+            }
+        }
         var summary: String
         switch weekly?.outcome {
         case "exhausted": summary = "Weekly quota exhausted\(subset)"
@@ -309,6 +329,7 @@ public enum UsageModel {
         return WorkloadRow(
             id: raw.id ?? "", label: nonEmpty(raw.label) ?? raw.id ?? "Workload",
             signal: signal, stale: stale, expired: expired, summary: summary,
+            forecastValueText: forecastValueText,
             coverageText: coverageText,
             detail: details.joined(separator: "\n"), availabilityText: available,
             freshnessText: freshness,
@@ -332,7 +353,7 @@ public enum UsageModel {
     ///
     ///     "Claude: Weekly risk · −25% ~2h · 2/2 modeled"
     public static func forecastSummary(_ row: WorkloadRow, now: Date) -> String {
-        var text = "\(row.label): \(row.summary)"
+        var text = "\(row.label): \(row.forecastValueText)"
         if row.signal.numeric {
             // The signal already spells out a conservative bound; the parenthetical replaces it
             // rather than repeating it.
@@ -348,7 +369,8 @@ public enum UsageModel {
                 ? " ~now"
                 : " ~\(Formatting.formatDuration(exhausts.timeIntervalSince(now) * 1000))"
         }
-        if row.limited { text += " · limited" }
+        // A stale or expired row never reaches the outcome the limited flag qualifies.
+        if row.limited, !row.stale, !row.expired { text += " · limited" }
         if row.coverageValid, let eligible = row.coverageEligible, eligible > 0 {
             text += " · \(row.coverageText)"
         }
