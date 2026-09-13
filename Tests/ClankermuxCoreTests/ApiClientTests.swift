@@ -66,163 +66,77 @@ struct ApiClientTests {
         return URLSessionApiClient(configuration: configuration, requestTimeout: 5)
     }
 
-    @Test("decodes the status payload")
-    func decodesStatus() async throws {
+    @Test("decodes the proxy's published status and account examples")
+    func publishedExamples() async throws {
         let client = makeClient()
-        StubURLProtocol.set(path: "/public/v1/status", body: Fixtures.statusJSON)
-
-        let response = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
-        #expect(response.schema == "clankermux.public.status.v1")
-        #expect(response.generatedAt.instant == Fixtures.now)
-        #expect(response.pool?.configured == 3)
-        #expect(response.pool?.configuredPresence == .present)
-        #expect(response.usage?.fiveHour?.meanUtilizationPct == 37.5)
-        #expect(response.providers?.count == 2)
-        #expect(response.providers?[0].scopedLimits?[0].label == "Fable")
-    }
-
-    @Test("decodes the accounts payload, keeping an unreadable window unreadable")
-    func decodesAccounts() async throws {
-        let client = makeClient()
-        StubURLProtocol.set(path: "/public/v1/accounts", body: Fixtures.accountsJSON)
-
-        let response = try await client.fetchAccounts(baseURL: baseURL, timeout: 5)
-        #expect(response.accounts?.count == 3)
-        #expect(response.accounts?[0].windows?.count == 3)
-        #expect(response.accounts?[0].windows?[0].prediction?.predictedUtilizationAtResetPct == 95)
-        #expect(response.accounts?[1].availability?.reason == "queueing")
-        #expect(response.accounts?[1].credential?.state == "refreshable")
-        #expect(response.accounts?[1].measurementState == "stale")
-        #expect(response.accounts?[1].windows?[0].prediction?.lowConfidence == true)
-        #expect(response.accounts?[2].windows?[0].utilizationPct == nil)
-        #expect(response.accounts?[2].windows?[0].resetsAt.instant == nil)
-    }
-
-    @Test("decodes the runway payload")
-    func decodesRunway() async throws {
-        let client = makeClient()
-        StubURLProtocol.set(path: "/public/v1/runway", body: Fixtures.runwayJSON)
-
-        let response = try await client.fetchRunway(baseURL: baseURL, timeout: 5)
-        #expect(response.coverage?.activeKeyCount == 2)
-        #expect(response.horizonMs == 1_209_600_000)
-        #expect(response.worstStatedOutcome?.kind == "runway")
-        #expect(response.worstStatedOutcome?.causes?.first?.accountId == "account-c")
-    }
-
-    /// Every timestamp the server emits carries milliseconds, which a default
-    /// `ISO8601DateFormatter` rejects outright.
-    @Test("fractional-second timestamps parse")
-    func fractionalSecondTimestamps() async throws {
-        let client = makeClient()
-        StubURLProtocol.set(path: "/public/v1/status", body: Fixtures.statusJSON)
-
-        let response = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
+        StubURLProtocol.set(path: "/public/v1/status", body: try example("status"))
+        StubURLProtocol.set(path: "/public/v1/accounts", body: try example("accounts"))
+        let status = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
+        #expect(status.serviceState == "ready")
+        #expect(status.accounts?.configured == 1)
+        #expect(status.version == "2026.9.example")
+        let accounts = try await client.fetchAccounts(baseURL: baseURL, timeout: 5)
+        #expect(accounts.accounts?.first?.windows?.first?.forecast?.outcome == "lasts_until_reset")
         #expect(
-            response.pool?.nextAvailableAt.instant == Fixtures.date("2026-08-24T12:30:00.000Z"))
+            accounts.accounts?.first?.windows?.first?.resetsAt.instant
+                == Fixtures.date("2026-09-09T15:00:00.000Z"))
     }
 
-    @Test("timestamps sent as JSON numbers or numeric strings parse as epoch milliseconds")
-    func numericTimestamps() async throws {
+    @Test(
+        "decodes all published workload variants",
+        arguments: [
+            "workloads", "workloads.partial", "workloads.family", "workloads.increase-limit",
+            "workloads.reduction-limit",
+        ])
+    func workloadExamples(name: String) async throws {
         let client = makeClient()
-        let epoch = Fixtures.now.timeIntervalSince1970 * 1000
-        StubURLProtocol.set(
-            path: "/public/v1/status",
-            body: """
-                {
-                  "schema": "clankermux.public.status.v1",
-                  "generatedAt": \(Int(epoch)),
-                  "status": "ok",
-                  "pool": { "configured": 1, "defaultRoutable": 1,
-                            "nextAvailableAt": "\(Int(epoch))" }
-                }
-                """
-        )
-
-        let response = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
-        #expect(response.generatedAt.instant == Fixtures.now)
-        #expect(response.pool?.nextAvailableAt.instant == Fixtures.now)
-    }
-
-    @Test("a non-ISO, non-numeric timestamp reads as unknown rather than failing the payload")
-    func unreadableTimestamp() async throws {
-        let client = makeClient()
-        StubURLProtocol.set(
-            path: "/public/v1/status",
-            body: """
-                {
-                  "schema": "clankermux.public.status.v1",
-                  "generatedAt": "not-a-date",
-                  "pool": { "configured": 1 }
-                }
-                """
-        )
-        let response = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
-        #expect(response.generatedAt.instant == nil)
-    }
-
-    @Test("a missing pool.configured and an explicit null both fall back to the derived count")
-    func poolConfiguredPresence() async throws {
-        let client = makeClient()
-        StubURLProtocol.set(
-            path: "/public/v1/status",
-            body: """
-                {"schema": "clankermux.public.status.v1", "pool": {"paused": 0}}
-                """
-        )
-        let missing = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
-        #expect(missing.pool?.configuredPresence == .missing)
-        #expect(missing.pool?.configured == nil)
-
-        StubURLProtocol.set(
-            path: "/public/v1/status",
-            body: """
-                {"schema": "clankermux.public.status.v1",
-                 "pool": {"configured": null, "defaultRoutable": null}}
-                """
-        )
-        let explicitNull = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
-        #expect(explicitNull.pool?.configuredPresence == .explicitNull)
-        #expect(explicitNull.pool?.configured == nil)
-        #expect(explicitNull.pool?.defaultRoutablePresence == .explicitNull)
-
-        for status in [missing, explicitNull] {
-            let view = UsageModel.buildView(
-                accounts: Fixtures.accounts(), status: status, runway: nil,
-                options: ViewOptions(), localNow: Fixtures.now)
-            #expect(view.pool.configured == 3)
-            #expect(view.pool.defaultRoutable == 2)
+        StubURLProtocol.set(path: "/public/v1/workloads", body: try example(name))
+        let payload = try await client.fetchWorkloads(baseURL: baseURL, timeout: 5)
+        #expect(payload.schema == "clankermux.public.workloads.v1")
+        #expect(payload.workloads?.isEmpty == false)
+        #expect(payload.workloads?.first?.weekly?.computedAt.instant != nil)
+        let view = UsageModel.buildView(
+            accounts: [], workloads: payload, localNow: Fixtures.date("2026-09-09T12:00:10.000Z"))
+        #expect(!view.workloads.isEmpty)
+        if name == "workloads.partial" {
+            #expect(view.workloads.allSatisfy { !$0.signal.numeric })
+        }
+        if name == "workloads.reduction-limit" {
+            #expect(view.workloads.contains { $0.signal.value.contains("insufficient") })
+        }
+        if name == "workloads.increase-limit" {
+            #expect(view.workloads.contains { $0.signal.value.contains("≥") })
         }
     }
 
-    /// Every one of these numbers passes schema validation; only the magnitude is abnormal. The
-    /// `Double` to `Int` narrowing would otherwise trap on each refresh, on wire data alone.
-    @Test("out-of-range counts saturate instead of trapping")
-    func outOfRangeCounts() async throws {
+    @Test("timestamps accept ISO, numeric strings, numbers and unreadable values")
+    func timestamps() throws {
+        for json in ["1787000000000", "\"1787000000000\""] {
+            let value = try JSONDecoder().decode(FlexibleTimestamp.self, from: Data(json.utf8))
+            #expect(value.date == Date(timeIntervalSince1970: 1_787_000_000))
+        }
+        for json in ["\"not-a-date\"", "null"] {
+            let value = try JSONDecoder().decode(FlexibleTimestamp.self, from: Data(json.utf8))
+            #expect(value.date == nil)
+        }
+    }
+
+    @Test("the retired status shape is rejected even though its schema ID is unchanged")
+    func retiredStatus() async {
         let client = makeClient()
         StubURLProtocol.set(
             path: "/public/v1/status",
-            body: """
-                {"schema": "clankermux.public.status.v1",
-                 "pool": {"configured": 1e300, "defaultRoutable": 1e30, "paused": -1e300,
-                          "rateLimited": 1e30, "usageExhausted": 0},
-                 "usage": {"fiveHour": {"meanUtilizationPct": 50,
-                                        "contributingAccountCount": 1e300,
-                                        "unknownAccountCount": 1e30}}}
-                """
-        )
-        let status = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
-        let view = UsageModel.buildView(
-            accounts: Fixtures.accounts(), status: status, runway: nil, options: ViewOptions(),
-            localNow: Fixtures.now)
+            body:
+                #"{"schema":"clankermux.public.status.v1","pool":{"configured":3},"status":"ok"}"#)
+        await #expect(throws: ApiError.unexpectedResponse(label: "status")) {
+            _ = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
+        }
+    }
 
-        #expect(view.pool.configured == Int.max)
-        #expect(view.pool.defaultRoutable == Int.max)
-        #expect(view.pool.paused == Int.min)
-        #expect(view.pool.rateLimited == Int.max)
-        #expect(view.usagePools[0].accountCount == Int.max)
-        #expect(view.usagePools[0].unknownCount == Int.max)
-        #expect(view.usagePools[0].usedPercent == 50)
+    private func example(_ name: String) throws -> String {
+        let url = try #require(
+            Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Examples"))
+        return try String(contentsOf: url, encoding: .utf8)
     }
 
     @Test("a wrong schema is rejected rather than rendered as an empty view")
@@ -234,8 +148,10 @@ struct ApiClientTests {
                 {"schema": "clankermux.public.status.v2", "pool": {"configured": 1}}
                 """
         )
-        await #expect(throws: ApiError.unsupportedSchema(
-            label: "status", found: "clankermux.public.status.v2")) {
+        await #expect(
+            throws: ApiError.unsupportedSchema(
+                label: "status", found: "clankermux.public.status.v2")
+        ) {
             _ = try await client.fetchStatus(baseURL: baseURL, timeout: 5)
         }
 
@@ -259,9 +175,9 @@ struct ApiClientTests {
         }
 
         StubURLProtocol.set(
-            path: "/public/v1/runway", body: "{\"schema\": \"clankermux.public.runway.v1\"}")
-        await #expect(throws: ApiError.unexpectedResponse(label: "runway")) {
-            _ = try await client.fetchRunway(baseURL: baseURL, timeout: 5)
+            path: "/public/v1/workloads", body: "{\"schema\": \"clankermux.public.workloads.v1\"}")
+        await #expect(throws: ApiError.unexpectedResponse(label: "workloads")) {
+            _ = try await client.fetchWorkloads(baseURL: baseURL, timeout: 5)
         }
     }
 

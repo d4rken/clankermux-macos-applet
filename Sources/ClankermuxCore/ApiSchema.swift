@@ -72,245 +72,101 @@ extension Optional where Wrapped == FlexibleTimestamp {
     public var instant: Date? { self?.date }
 }
 
-// MARK: - Field presence
-
-/// Whether a JSON field was absent, explicitly null, or carried a value.
-public enum FieldPresence: String, Sendable, Equatable {
-    case missing
-    case explicitNull
-    case present
-}
-
-// MARK: - Shared aggregates
-
-/// A server-computed mean across the accounts that supplied one quota window.
-///
-/// Backs `usage.fiveHour`, `usage.sevenDay` and each entry of `providers[].scopedLimits`.
-public struct UsageAggregate: Codable, Sendable, Equatable {
-    public let scopeId: String?
-    public let label: String?
-    public let meanUtilizationPct: Double?
-    public let contributingAccountCount: Double?
-    public let unknownAccountCount: Double?
-    public let earliestResetsAt: FlexibleTimestamp?
-
-    public init(
-        scopeId: String? = nil,
-        label: String? = nil,
-        meanUtilizationPct: Double? = nil,
-        contributingAccountCount: Double? = nil,
-        unknownAccountCount: Double? = nil,
-        earliestResetsAt: FlexibleTimestamp? = nil
-    ) {
-        self.scopeId = scopeId
-        self.label = label
-        self.meanUtilizationPct = meanUtilizationPct
-        self.contributingAccountCount = contributingAccountCount
-        self.unknownAccountCount = unknownAccountCount
-        self.earliestResetsAt = earliestResetsAt
-    }
-}
-
-// MARK: - /public/v1/status
-
 public struct StatusResponse: Codable, Sendable, Equatable {
-    public let schema: String?
-    public let generatedAt: FlexibleTimestamp?
-    public let status: String?
-    public let pool: PoolInfo?
-    public let usage: UsageSection?
-    public let providers: [ProviderStatus]?
+    public var schema: String?
+    public var generatedAt: FlexibleTimestamp?
+    public var serviceState: String?
+    public var version: String?
+    public var uptimeS: Double?
+    public var accounts: AccountTotals?
 
     public init(
         schema: String? = nil,
         generatedAt: FlexibleTimestamp? = nil,
-        status: String? = nil,
-        pool: PoolInfo? = nil,
-        usage: UsageSection? = nil,
-        providers: [ProviderStatus]? = nil
+        serviceState: String? = nil,
+        version: String? = nil,
+        uptimeS: Double? = nil,
+        accounts: AccountTotals? = nil
     ) {
         self.schema = schema
         self.generatedAt = generatedAt
-        self.status = status
-        self.pool = pool
-        self.usage = usage
-        self.providers = providers
+        self.serviceState = serviceState
+        self.version = version
+        self.uptimeS = uptimeS
+        self.accounts = accounts
     }
 }
 
-public struct UsageSection: Codable, Sendable, Equatable {
-    public let fiveHour: UsageAggregate?
-    public let sevenDay: UsageAggregate?
-
-    public init(fiveHour: UsageAggregate? = nil, sevenDay: UsageAggregate? = nil) {
-        self.fiveHour = fiveHour
-        self.sevenDay = sevenDay
-    }
-}
-
-/// Routing-pool counters.
-///
-/// `configured` and `defaultRoutable` keep their wire presence so an explicit null stays
-/// distinguishable from an absent field; both resolve to nil and fall back to the derived account
-/// count.
-public struct PoolInfo: Codable, Sendable, Equatable {
-    public let configured: Double?
-    public let configuredPresence: FieldPresence
-    public let defaultRoutable: Double?
-    public let defaultRoutablePresence: FieldPresence
-    public let paused: Double?
-    public let rateLimited: Double?
-    public let usageExhausted: Double?
-    public let nextAvailableAt: FlexibleTimestamp?
-
-    private enum CodingKeys: String, CodingKey {
-        case configured
-        case defaultRoutable
-        case paused
-        case rateLimited
-        case usageExhausted
-        case nextAvailableAt
-    }
+public struct AccountTotals: Codable, Sendable, Equatable {
+    public var configured: Double?
+    public var paused: Double?
 
     public init(
         configured: Double? = nil,
-        configuredPresence: FieldPresence = .missing,
-        defaultRoutable: Double? = nil,
-        defaultRoutablePresence: FieldPresence = .missing,
-        paused: Double? = nil,
-        rateLimited: Double? = nil,
-        usageExhausted: Double? = nil,
-        nextAvailableAt: FlexibleTimestamp? = nil
+        paused: Double? = nil
     ) {
         self.configured = configured
-        self.configuredPresence = configuredPresence
-        self.defaultRoutable = defaultRoutable
-        self.defaultRoutablePresence = defaultRoutablePresence
         self.paused = paused
-        self.rateLimited = rateLimited
-        self.usageExhausted = usageExhausted
-        self.nextAvailableAt = nextAvailableAt
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        (configured, configuredPresence) = try Self.count(container, .configured)
-        (defaultRoutable, defaultRoutablePresence) = try Self.count(container, .defaultRoutable)
-        paused = try container.decodeIfPresent(Double.self, forKey: .paused)
-        rateLimited = try container.decodeIfPresent(Double.self, forKey: .rateLimited)
-        usageExhausted = try container.decodeIfPresent(Double.self, forKey: .usageExhausted)
-        nextAvailableAt = try container.decodeIfPresent(
-            FlexibleTimestamp.self, forKey: .nextAvailableAt)
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        switch configuredPresence {
-        case .missing: break
-        case .explicitNull: try container.encodeNil(forKey: .configured)
-        case .present: try container.encode(configured, forKey: .configured)
-        }
-        switch defaultRoutablePresence {
-        case .missing: break
-        case .explicitNull: try container.encodeNil(forKey: .defaultRoutable)
-        case .present: try container.encode(defaultRoutable, forKey: .defaultRoutable)
-        }
-        try container.encodeIfPresent(paused, forKey: .paused)
-        try container.encodeIfPresent(rateLimited, forKey: .rateLimited)
-        try container.encodeIfPresent(usageExhausted, forKey: .usageExhausted)
-        try container.encodeIfPresent(nextAvailableAt, forKey: .nextAvailableAt)
-    }
-
-    private static func count(
-        _ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys
-    ) throws -> (Double?, FieldPresence) {
-        guard container.contains(key) else { return (nil, .missing) }
-        if try container.decodeNil(forKey: key) { return (nil, .explicitNull) }
-        return (try container.decode(Double.self, forKey: key), .present)
     }
 }
-
-public struct ProviderStatus: Codable, Sendable, Equatable {
-    public let provider: String?
-    public let anyOverload: BreakerState?
-    public let providerWideOverload: BreakerState?
-    public let scopedLimits: [UsageAggregate]?
-
-    public init(
-        provider: String? = nil,
-        anyOverload: BreakerState? = nil,
-        providerWideOverload: BreakerState? = nil,
-        scopedLimits: [UsageAggregate]? = nil
-    ) {
-        self.provider = provider
-        self.anyOverload = anyOverload
-        self.providerWideOverload = providerWideOverload
-        self.scopedLimits = scopedLimits
-    }
-}
-
-public struct BreakerState: Codable, Sendable, Equatable {
-    public let state: String?
-    public let until: FlexibleTimestamp?
-    public let probeActive: Bool?
-
-    public init(state: String? = nil, until: FlexibleTimestamp? = nil, probeActive: Bool? = nil) {
-        self.state = state
-        self.until = until
-        self.probeActive = probeActive
-    }
-}
-
-// MARK: - /public/v1/accounts
 
 public struct AccountsResponse: Codable, Sendable, Equatable {
-    public let schema: String?
-    public let accounts: [Account]?
+    public var schema: String?
+    public var generatedAt: FlexibleTimestamp?
+    public var accounts: [Account]?
 
-    public init(schema: String? = nil, accounts: [Account]? = nil) {
+    public init(
+        schema: String? = nil,
+        generatedAt: FlexibleTimestamp? = nil,
+        accounts: [Account]? = nil
+    ) {
         self.schema = schema
+        self.generatedAt = generatedAt
         self.accounts = accounts
     }
 }
 
 public struct Account: Codable, Sendable, Equatable {
-    public let id: String?
-    public let name: String?
-    public let provider: String?
-    public let isDefaultCandidate: Bool?
-    public let availability: Availability?
-    public let credential: Credential?
-    public let measurementState: String?
-    public let windows: [UsageWindow]?
+    public var id: String?
+    public var name: String?
+    public var provider: String?
+    public var availability: Availability?
+    public var credential: Credential?
+    public var measurementState: String?
+    public var usageObservedAt: FlexibleTimestamp?
+    public var windows: [UsageWindow]?
 
     public init(
         id: String? = nil,
         name: String? = nil,
         provider: String? = nil,
-        isDefaultCandidate: Bool? = nil,
         availability: Availability? = nil,
         credential: Credential? = nil,
         measurementState: String? = nil,
+        usageObservedAt: FlexibleTimestamp? = nil,
         windows: [UsageWindow]? = nil
     ) {
         self.id = id
         self.name = name
         self.provider = provider
-        self.isDefaultCandidate = isDefaultCandidate
         self.availability = availability
         self.credential = credential
         self.measurementState = measurementState
+        self.usageObservedAt = usageObservedAt
         self.windows = windows
     }
 }
 
 public struct Availability: Codable, Sendable, Equatable {
-    public let state: String?
-    public let reason: String?
-    public let availableAt: FlexibleTimestamp?
+    public var state: String?
+    public var reason: String?
+    public var availableAt: FlexibleTimestamp?
 
-    public init(state: String? = nil, reason: String? = nil, availableAt: FlexibleTimestamp? = nil)
-    {
+    public init(
+        state: String? = nil,
+        reason: String? = nil,
+        availableAt: FlexibleTimestamp? = nil
+    ) {
         self.state = state
         self.reason = reason
         self.availableAt = availableAt
@@ -318,23 +174,26 @@ public struct Availability: Codable, Sendable, Equatable {
 }
 
 public struct Credential: Codable, Sendable, Equatable {
-    public let state: String?
-    public let expiresAt: FlexibleTimestamp?
+    public var state: String?
+    public var expiresAt: FlexibleTimestamp?
 
-    public init(state: String? = nil, expiresAt: FlexibleTimestamp? = nil) {
+    public init(
+        state: String? = nil,
+        expiresAt: FlexibleTimestamp? = nil
+    ) {
         self.state = state
         self.expiresAt = expiresAt
     }
 }
 
 public struct UsageWindow: Codable, Sendable, Equatable {
-    public let kind: String?
-    public let scopeId: String?
-    public let label: String?
-    public let utilizationPct: Double?
-    public let observedAt: FlexibleTimestamp?
-    public let resetsAt: FlexibleTimestamp?
-    public let prediction: Prediction?
+    public var kind: String?
+    public var scopeId: String?
+    public var label: String?
+    public var utilizationPct: Double?
+    public var observedAt: FlexibleTimestamp?
+    public var resetsAt: FlexibleTimestamp?
+    public var forecast: WindowForecast?
 
     public init(
         kind: String? = nil,
@@ -343,7 +202,7 @@ public struct UsageWindow: Codable, Sendable, Equatable {
         utilizationPct: Double? = nil,
         observedAt: FlexibleTimestamp? = nil,
         resetsAt: FlexibleTimestamp? = nil,
-        prediction: Prediction? = nil
+        forecast: WindowForecast? = nil
     ) {
         self.kind = kind
         self.scopeId = scopeId
@@ -351,94 +210,204 @@ public struct UsageWindow: Codable, Sendable, Equatable {
         self.utilizationPct = utilizationPct
         self.observedAt = observedAt
         self.resetsAt = resetsAt
-        self.prediction = prediction
+        self.forecast = forecast
     }
 }
 
-public struct Prediction: Codable, Sendable, Equatable {
-    public let predictedUtilizationAtResetPct: Double?
-    public let exhaustsAt: FlexibleTimestamp?
-    public let willExhaustBeforeReset: Bool?
-    public let lowConfidence: Bool?
-    public let state: String?
+public struct WindowForecast: Codable, Sendable, Equatable {
+    public var outcome: String?
+    public var quality: String?
+    public var reason: String?
+    public var exhaustsAt: FlexibleTimestamp?
+    public var reassessAt: FlexibleTimestamp?
 
     public init(
-        predictedUtilizationAtResetPct: Double? = nil,
+        outcome: String? = nil,
+        quality: String? = nil,
+        reason: String? = nil,
         exhaustsAt: FlexibleTimestamp? = nil,
-        willExhaustBeforeReset: Bool? = nil,
-        lowConfidence: Bool? = nil,
-        state: String? = nil
+        reassessAt: FlexibleTimestamp? = nil
     ) {
-        self.predictedUtilizationAtResetPct = predictedUtilizationAtResetPct
+        self.outcome = outcome
+        self.quality = quality
+        self.reason = reason
         self.exhaustsAt = exhaustsAt
-        self.willExhaustBeforeReset = willExhaustBeforeReset
-        self.lowConfidence = lowConfidence
-        self.state = state
+        self.reassessAt = reassessAt
     }
 }
 
-// MARK: - /public/v1/runway
-
-public struct RunwayResponse: Codable, Sendable, Equatable {
-    public let schema: String?
-    public let generatedAt: FlexibleTimestamp?
-    public let horizonMs: Double?
-    public let coverage: Coverage?
-    public let worstStatedOutcome: StatedOutcome?
+public struct WorkloadsResponse: Codable, Sendable, Equatable {
+    public var schema: String?
+    public var generatedAt: FlexibleTimestamp?
+    public var workloads: [Workload]?
 
     public init(
         schema: String? = nil,
         generatedAt: FlexibleTimestamp? = nil,
-        horizonMs: Double? = nil,
-        coverage: Coverage? = nil,
-        worstStatedOutcome: StatedOutcome? = nil
+        workloads: [Workload]? = nil
     ) {
         self.schema = schema
         self.generatedAt = generatedAt
-        self.horizonMs = horizonMs
-        self.coverage = coverage
-        self.worstStatedOutcome = worstStatedOutcome
+        self.workloads = workloads
     }
 }
 
-public struct Coverage: Codable, Sendable, Equatable {
-    public let activeKeyCount: Double?
-    public let statedKeyCount: Double?
-    public let unobservedKeyCount: Double?
+public struct Workload: Codable, Sendable, Equatable {
+    public var id: String?
+    public var label: String?
+    public var parentWorkloadId: String?
+    public var availability: WorkloadAvailability?
+    public var weekly: WeeklyBudget?
 
     public init(
-        activeKeyCount: Double? = nil,
-        statedKeyCount: Double? = nil,
-        unobservedKeyCount: Double? = nil
+        id: String? = nil,
+        label: String? = nil,
+        parentWorkloadId: String? = nil,
+        availability: WorkloadAvailability? = nil,
+        weekly: WeeklyBudget? = nil
     ) {
-        self.activeKeyCount = activeKeyCount
-        self.statedKeyCount = statedKeyCount
-        self.unobservedKeyCount = unobservedKeyCount
+        self.id = id
+        self.label = label
+        self.parentWorkloadId = parentWorkloadId
+        self.availability = availability
+        self.weekly = weekly
     }
 }
 
-public struct StatedOutcome: Codable, Sendable, Equatable {
-    public let kind: String?
-    public let exhaustsAt: FlexibleTimestamp?
-    public let causes: [OutcomeCause]?
+public struct WorkloadAvailability: Codable, Sendable, Equatable {
+    public var computedAt: FlexibleTimestamp?
+    public var context: String?
+    public var availableAccounts: Double?
+    public var constrainedAccounts: Double?
+    public var unknownAccounts: Double?
+    public var nextRecoveryAt: FlexibleTimestamp?
 
     public init(
-        kind: String? = nil,
+        computedAt: FlexibleTimestamp? = nil,
+        context: String? = nil,
+        availableAccounts: Double? = nil,
+        constrainedAccounts: Double? = nil,
+        unknownAccounts: Double? = nil,
+        nextRecoveryAt: FlexibleTimestamp? = nil
+    ) {
+        self.computedAt = computedAt
+        self.context = context
+        self.availableAccounts = availableAccounts
+        self.constrainedAccounts = constrainedAccounts
+        self.unknownAccounts = unknownAccounts
+        self.nextRecoveryAt = nextRecoveryAt
+    }
+}
+
+public struct WeeklyBudget: Codable, Sendable, Equatable {
+    public var computedAt: FlexibleTimestamp?
+    public var evidenceObservedAt: FlexibleTimestamp?
+    public var period: WeeklyPeriod?
+    public var outcome: String?
+    public var quality: String?
+    public var coverage: WeeklyCoverage?
+    public var accountRisk: AccountRisk?
+    public var exhaustsAt: FlexibleTimestamp?
+    public var pace: WeeklyPace?
+    public var reason: String?
+
+    public init(
+        computedAt: FlexibleTimestamp? = nil,
+        evidenceObservedAt: FlexibleTimestamp? = nil,
+        period: WeeklyPeriod? = nil,
+        outcome: String? = nil,
+        quality: String? = nil,
+        coverage: WeeklyCoverage? = nil,
+        accountRisk: AccountRisk? = nil,
         exhaustsAt: FlexibleTimestamp? = nil,
-        causes: [OutcomeCause]? = nil
+        pace: WeeklyPace? = nil,
+        reason: String? = nil
     ) {
-        self.kind = kind
+        self.computedAt = computedAt
+        self.evidenceObservedAt = evidenceObservedAt
+        self.period = period
+        self.outcome = outcome
+        self.quality = quality
+        self.coverage = coverage
+        self.accountRisk = accountRisk
         self.exhaustsAt = exhaustsAt
-        self.causes = causes
+        self.pace = pace
+        self.reason = reason
     }
 }
 
-public struct OutcomeCause: Codable, Sendable, Equatable {
-    public let accountId: String?
-    public let windowKind: String?
+public struct WeeklyPeriod: Codable, Sendable, Equatable {
+    public var startsAt: FlexibleTimestamp?
+    public var endsAt: FlexibleTimestamp?
+    public var endReason: String?
 
-    public init(accountId: String? = nil, windowKind: String? = nil) {
-        self.accountId = accountId
-        self.windowKind = windowKind
+    public init(
+        startsAt: FlexibleTimestamp? = nil,
+        endsAt: FlexibleTimestamp? = nil,
+        endReason: String? = nil
+    ) {
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+        self.endReason = endReason
+    }
+}
+
+public struct WeeklyCoverage: Codable, Sendable, Equatable {
+    public var eligibleAccounts: Double?
+    public var modeledAccounts: Double?
+    public var idleAccounts: Double?
+    public var learningAccounts: Double?
+    public var unavailableAccounts: Double?
+
+    public init(
+        eligibleAccounts: Double? = nil,
+        modeledAccounts: Double? = nil,
+        idleAccounts: Double? = nil,
+        learningAccounts: Double? = nil,
+        unavailableAccounts: Double? = nil
+    ) {
+        self.eligibleAccounts = eligibleAccounts
+        self.modeledAccounts = modeledAccounts
+        self.idleAccounts = idleAccounts
+        self.learningAccounts = learningAccounts
+        self.unavailableAccounts = unavailableAccounts
+    }
+}
+
+public struct AccountRisk: Codable, Sendable, Equatable {
+    public var spentAccounts: Double?
+    public var atRiskAccounts: Double?
+    public var withinBudgetAccounts: Double?
+    public var unknownAccounts: Double?
+
+    public init(
+        spentAccounts: Double? = nil,
+        atRiskAccounts: Double? = nil,
+        withinBudgetAccounts: Double? = nil,
+        unknownAccounts: Double? = nil
+    ) {
+        self.spentAccounts = spentAccounts
+        self.atRiskAccounts = atRiskAccounts
+        self.withinBudgetAccounts = withinBudgetAccounts
+        self.unknownAccounts = unknownAccounts
+    }
+}
+
+public struct WeeklyPace: Codable, Sendable, Equatable {
+    public var state: String?
+    public var changePct: Double?
+    public var qualification: String?
+    public var reason: String?
+
+    public init(
+        state: String? = nil,
+        changePct: Double? = nil,
+        qualification: String? = nil,
+        reason: String? = nil
+    ) {
+        self.state = state
+        self.changePct = changePct
+        self.qualification = qualification
+        self.reason = reason
     }
 }

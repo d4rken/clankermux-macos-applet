@@ -1,144 +1,87 @@
 import Foundation
 
-public struct PanelMeter: Sendable, Equatable, Identifiable {
-    public let key: String
-    public let label: String
-    public let percent: Int
-    public let severity: Severity
-
-    public var id: String { key }
+public enum PanelDisplay: String, Sendable, Equatable, CaseIterable {
+    case icon, compact, full
 }
 
-/// Everything the menu bar item draws, decided without touching AppKit.
-/// How much the menu bar item shows.
-///
-/// A macOS menu bar is a scarce, shared strip: on a notched display already holding a normal set of
-/// status items the room left for a new one can be as little as 20 points, and macOS draws nothing
-/// at all rather than truncating an item that does not fit. So the default is the icon, and the
-/// wider forms are opt-in for anyone with the room.
-public enum PanelDisplay: String, Sendable, Equatable, CaseIterable {
-    /// A severity-tinted symbol, about 24 points.
-    case icon
-    /// The runway headline, about 106 points.
-    case runway
-    /// The runway headline plus a meter per pool, about 435 points.
-    case full
+public struct PanelMeter: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let label: String
+    public let signal: PaceSignal
+    public let alwaysShowsValue: Bool
 }
 
 public struct PanelContent: Sendable, Equatable {
-    /// For example `R 5d 18h · 3/4! ⏳`.
-    public let runwayText: String
-    public let runwaySeverity: Severity
-    /// True while the item is a placeholder, which draws in the neutral label colour rather than a
-    /// severity colour.
-    public let runwayIsMuted: Bool
-    /// Draw a severity-tinted symbol instead of `runwayText`.
+    public let headline: String
+    public let severity: Severity
     public let iconOnly: Bool
+    public let compact: Bool
     public let meters: [PanelMeter]
-    /// `quota –` stands in when no pool is readable.
-    public let showsEmptyPlaceholder: Bool
     public let tooltip: String
 
-    /// - Parameter display: how much of the panel belongs in the menu bar. The popover always
-    ///   shows everything regardless of this.
     public static func make(
-        state: LoadState,
-        view: UsageView,
-        lastError: String,
-        lastRunwayError: String,
-        lastSuccess: Date?,
-        display: PanelDisplay,
-        now: Date
+        snapshot: RefreshSnapshot, view: UsageView, display: PanelDisplay, now: Date
     ) -> PanelContent {
-        guard state.isLoaded else {
-            let failed = !lastError.isEmpty
-            return PanelContent(
-                runwayText: display == .icon ? "" : (failed ? "Clankermux !" : "Clankermux …"),
-                runwaySeverity: failed ? .warning : .normal,
-                runwayIsMuted: !failed,
-                iconOnly: display == .icon,
-                meters: [],
-                showsEmptyPlaceholder: false,
-                tooltip: failed ? lastError : "Loading Clankermux usage…"
-            )
+        let accountsAreCurrent =
+            snapshot.lastAccountsError.isEmpty
+            && snapshot.accountsReceivedAt.map {
+                now.timeIntervalSince($0) < UsageModel.staleInterval
+            } == true
+        let rows = view.workloads.filter { row in
+            guard accountsAreCurrent, let accounts = snapshot.accounts else { return true }
+            let classID =
+                row.id.hasPrefix("class:")
+                ? row.id
+                : snapshot.workloads?.workloads?.first { $0.id == row.id }?.parentWorkloadId
+            guard let classID, classID.hasPrefix("class:") else { return true }
+            let provider = String(classID.dropFirst("class:".count))
+            let matching = accounts.filter { $0.provider == provider }
+            return matching.isEmpty || !matching.allSatisfy { $0.availability?.state == "paused" }
         }
-
-        let degraded = view.pool.defaultRoutable < view.pool.configured
-        let availabilityMarker =
-            degraded ? " · \(view.pool.defaultRoutable)/\(view.pool.configured)!" : ""
-        let overloadMarker = view.providerOverloads.isEmpty ? "" : " ⏳"
-
-        // Runway describes quota capacity only, so availability and overload trouble has to raise
-        // the headline severity separately.
-        var severity = view.runway.severity
-        if view.pool.defaultRoutable == 0 {
+        let severity: Severity
+        if rows.contains(where: { $0.signal.severity == .critical }) {
             severity = .critical
-        } else if (degraded || !view.providerOverloads.isEmpty) && severity == .normal {
+        } else if rows.contains(where: { $0.signal.severity == .warning }) {
             severity = .warning
+        } else if !rows.isEmpty && rows.allSatisfy({ $0.signal.severity == .normal }) {
+            severity = .normal
+        } else {
+            severity = .unknown
         }
-
-        let meters =
-            display == .full
-            ? UsageModel.panelUsagePools(view.usagePools).map {
-                PanelMeter(
-                    key: $0.key, label: $0.label, percent: $0.usedPercent, severity: $0.severity)
-            }
-            : []
-
+        let text: String
+        if rows.isEmpty {
+            text = snapshot.isRefreshing && snapshot.workloads == nil ? "Pace …" : "Pace –"
+        } else {
+            text = rows.map { "\($0.label) \($0.signal.value)" }.joined(separator: " · ")
+        }
+        var tooltip = view.workloads.flatMap {
+            [
+                "\($0.label): \($0.summary)", $0.coverageText, $0.detail, $0.availabilityText,
+                $0.freshnessText,
+            ]
+        }
+        if tooltip.isEmpty {
+            tooltip.append(
+                snapshot.isRefreshing && snapshot.workloads == nil
+                    ? "Loading workload pace…" : "Pacing unavailable")
+        }
+        tooltip.append(DetailContent.lastRefreshText(lastSuccess: snapshot.lastSuccess, now: now))
+        for (label, error) in [
+            ("Accounts/status", snapshot.lastError), ("Workloads", snapshot.lastWorkloadsError),
+        ] where !error.isEmpty {
+            tooltip.append("\(label) refresh failed: \(error)")
+        }
         return PanelContent(
-            runwayText: display == .icon
-                ? "" : "\(view.runway.panelText)\(availabilityMarker)\(overloadMarker)",
-            runwaySeverity: severity,
-            runwayIsMuted: false,
-            iconOnly: display == .icon,
-            meters: meters,
-            showsEmptyPlaceholder: display == .full && meters.isEmpty,
-            tooltip: tooltipLines(
-                view: view, lastError: lastError, lastRunwayError: lastRunwayError,
-                lastSuccess: lastSuccess, now: now
-            ).joined(separator: "\n")
-        )
-    }
-
-    static func tooltipLines(
-        view: UsageView,
-        lastError: String,
-        lastRunwayError: String,
-        lastSuccess: Date?,
-        now: Date
-    ) -> [String] {
-        var lines = [
-            "Quota runway: \(view.runway.value)",
-            view.runway.summary,
-            "Coverage: \(view.runway.coverageText)",
-            "Availability: \(view.pool.defaultRoutable) of \(view.pool.configured) accounts in the default routing context",
-        ]
-        for overload in view.providerOverloads {
-            let scope = overload.providerWide ? "provider-wide" : "provider or model scope"
-            let retry: String
-            if let until = overload.until {
-                retry = " · retry \(Formatting.formatReset(until, now: view.now))"
-            } else {
-                retry = overload.probeActive ? " · recovery probe active" : ""
-            }
-            lines.append("\(overload.provider) \(scope) overload \(overload.state)\(retry)")
-        }
-        for pool in view.usagePools {
-            let unknown = pool.unknownCount != 0 ? " · \(pool.unknownCount) unknown" : ""
-            lines.append(
-                "\(pool.label): \(pool.usedPercent)% mean usage across \(pool.accountCount) accounts\(unknown)"
-            )
-        }
-        if !lastRunwayError.isEmpty {
-            lines.append("Last runway refresh failed: \(lastRunwayError)")
-        }
-        if !lastError.isEmpty {
-            lines.append("Last refresh failed: \(lastError)")
-        } else if let lastSuccess {
-            lines.append(
-                "Updated \(Formatting.formatDuration(now.timeIntervalSince(lastSuccess) * 1000)) ago"
-            )
-        }
-        return lines
+            headline: display == .icon || !rows.isEmpty ? "" : text,
+            severity: severity, iconOnly: display == .icon,
+            compact: display == .compact,
+            meters: display != .icon
+                ? rows.map {
+                    PanelMeter(
+                        id: $0.id, label: $0.label, signal: $0.signal,
+                        alwaysShowsValue: $0.stale || $0.expired
+                            || (!$0.signal.numeric && $0.signal.severity != .unknown))
+                } : [],
+            tooltip: tooltip.joined(separator: "\n"))
     }
 }

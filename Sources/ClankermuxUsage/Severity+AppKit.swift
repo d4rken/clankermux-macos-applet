@@ -10,6 +10,7 @@ extension Severity {
         case .normal: return .systemGreen
         case .warning: return .systemOrange
         case .critical: return .systemRed
+        case .unknown: return .secondaryLabelColor
         }
     }
 
@@ -40,6 +41,7 @@ extension StateKey {
         case .available: return Color(nsColor: .systemGreen)
         case .paused, .limited: return Color(nsColor: .systemOrange)
         case .error: return Color(nsColor: .systemRed)
+        case .unknown: return Color(nsColor: .secondaryLabelColor)
         }
     }
 }

@@ -106,13 +106,13 @@ struct ImmediateSleeper: Sleeper {
 actor StubApiClient: ApiClientProtocol {
     private(set) var statusCalls = 0
     private(set) var accountsCalls = 0
-    private(set) var runwayCalls = 0
+    private(set) var workloadsCalls = 0
     private(set) var baseURLs: [String] = []
     private(set) var timeouts: [TimeInterval] = []
 
     private var statusResult: Result<StatusResponse, ApiError>
     private var accountsResult: Result<AccountsResponse, ApiError>
-    private var runwayResult: Result<RunwayResponse, ApiError>
+    private var workloadsResult: Result<WorkloadsResponse, ApiError>
     private let gate: Gate?
     private let honorsCancellation: Bool
 
@@ -121,20 +121,20 @@ actor StubApiClient: ApiClientProtocol {
         accounts: Result<AccountsResponse, ApiError> = .success(
             AccountsResponse(
                 schema: "clankermux.public.accounts.v1", accounts: Fixtures.accounts())),
-        runway: Result<RunwayResponse, ApiError> = .success(Fixtures.runway()),
+        workloads: Result<WorkloadsResponse, ApiError> = .success(Fixtures.workloads()),
         gate: Gate? = nil,
         honorsCancellation: Bool = true
     ) {
         self.statusResult = status
         self.accountsResult = accounts
-        self.runwayResult = runway
+        self.workloadsResult = workloads
         self.gate = gate
         self.honorsCancellation = honorsCancellation
     }
 
     func setStatus(_ result: Result<StatusResponse, ApiError>) { statusResult = result }
     func setAccounts(_ result: Result<AccountsResponse, ApiError>) { accountsResult = result }
-    func setRunway(_ result: Result<RunwayResponse, ApiError>) { runwayResult = result }
+    func setWorkloads(_ result: Result<WorkloadsResponse, ApiError>) { workloadsResult = result }
 
     func fetchStatus(baseURL: String, timeout: TimeInterval) async throws -> StatusResponse {
         statusCalls += 1
@@ -150,11 +150,11 @@ actor StubApiClient: ApiClientProtocol {
         return try accountsResult.get()
     }
 
-    func fetchRunway(baseURL: String, timeout: TimeInterval) async throws -> RunwayResponse {
-        runwayCalls += 1
+    func fetchWorkloads(baseURL: String, timeout: TimeInterval) async throws -> WorkloadsResponse {
+        workloadsCalls += 1
         record(baseURL: baseURL, timeout: timeout)
         try await passGate()
-        return try runwayResult.get()
+        return try workloadsResult.get()
     }
 
     private func record(baseURL: String, timeout: TimeInterval) {

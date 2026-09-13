@@ -33,7 +33,7 @@ struct SettingsView: View {
                         "Base URL of Clankermux's public widget API, for example http://127.0.0.1:8080 or http://clankermux.example.test:8080"
                     )
                 Text(
-                    "The app reads Clankermux's unauthenticated, read-only /public/v1 status, accounts, and runway endpoints. Enter a complete HTTP or HTTPS URL above; hostnames and IP addresses are both supported."
+                    "The app reads Clankermux's public usage API. Enter a complete HTTP or HTTPS URL above; hostnames and IP addresses are both supported."
                 )
                 .font(.system(size: 11))
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
@@ -42,7 +42,7 @@ struct SettingsView: View {
 
             Section("Polling") {
                 Stepper(
-                    "Refresh every \(preferences.refreshInterval) seconds",
+                    "Refresh accounts/status every \(preferences.refreshInterval) seconds",
                     value: Binding(
                         get: { preferences.refreshInterval },
                         set: { preferences.refreshInterval = $0 }),
@@ -67,14 +67,14 @@ struct SettingsView: View {
                         set: { preferences.menuBarContent = $0 })
                 ) {
                     Text("Icon only").tag(PanelDisplay.icon)
-                    Text("Runway").tag(PanelDisplay.runway)
-                    Text("Runway and pool meters").tag(PanelDisplay.full)
+                    Text("Compact pace bars").tag(PanelDisplay.compact)
+                    Text("Full-size pace bars").tag(PanelDisplay.full)
                 }
                 .help(
-                    "The icon is about 24 points wide, the runway about 106, and the full panel about 435. macOS draws nothing at all rather than truncating an item it has no room for, so on a busy menu bar the wider forms can disappear entirely. The popover always shows everything."
+                    "The icon fits a busy menu bar. Pace bars use more space; macOS may hide an item that does not fit. The popover always shows full detail."
                 )
                 Stepper(
-                    "Width of each panel progress bar: \(preferences.panelBarWidth) points",
+                    "Width of each full-size pace bar: \(preferences.panelBarWidth) points",
                     value: Binding(
                         get: { preferences.panelBarWidth },
                         set: { preferences.panelBarWidth = $0 }),
@@ -82,21 +82,10 @@ struct SettingsView: View {
                     step: 2
                 )
                 Toggle(
-                    "Show percentages beside panel bars",
+                    "Show percentages beside full-size bars",
                     isOn: Binding(
                         get: { preferences.showPanelPercentages },
                         set: { preferences.showPanelPercentages = $0 })
-                )
-                Stepper(
-                    "Warn when quota runway falls below \(preferences.runwayWarningHours) hours",
-                    value: Binding(
-                        get: { preferences.runwayWarningHours },
-                        set: { preferences.runwayWarningHours = $0 }),
-                    in: Preferences.runwayWarningHoursRange,
-                    step: 1
-                )
-                .help(
-                    "The panel runway turns orange below this duration. It turns red when the pool is out of quota."
                 )
             }
 
@@ -106,15 +95,6 @@ struct SettingsView: View {
                     isOn: Binding(
                         get: { preferences.showScopedLimits },
                         set: { preferences.showScopedLimits = $0 })
-                )
-                Toggle(
-                    "Put the default routing candidate first",
-                    isOn: Binding(
-                        get: { preferences.defaultCandidateFirst },
-                        set: { preferences.defaultCandidateFirst = $0 })
-                )
-                .help(
-                    "This is the account selected for a fresh, unpinned, nominal-sized request; pinned and affinity-routed requests may choose differently."
                 )
             }
         }

@@ -2,7 +2,7 @@ import ClankermuxCore
 import Combine
 import Foundation
 
-/// The settings keys, matching the Cinnamon applet's `settings-schema.json` one for one.
+/// Persisted settings keys, including display preferences specific to macOS.
 enum PreferenceKey: String, Sendable, CaseIterable {
     case apiURL = "api-url"
     case refreshInterval = "refresh-interval"
@@ -10,9 +10,7 @@ enum PreferenceKey: String, Sendable, CaseIterable {
     case panelBarWidth = "panel-bar-width"
     case showPanelPercentages = "show-panel-percentages"
     case menuBarContent = "menu-bar-content"
-    case runwayWarningHours = "runway-warning-hours"
     case showScopedLimits = "show-scoped-limits"
-    case defaultCandidateFirst = "default-candidate-first"
 }
 
 /// `UserDefaults`-backed settings.
@@ -26,18 +24,15 @@ final class Preferences: ObservableObject {
     static let refreshIntervalRange = 10...900
     static let requestTimeoutRange = 2...60
     static let panelBarWidthRange = 30...100
-    static let runwayWarningHoursRange = 1...336
 
     static let registrationDefaults: [String: Any] = [
         PreferenceKey.apiURL.rawValue: defaultAPIURL,
         PreferenceKey.refreshInterval.rawValue: 30,
         PreferenceKey.requestTimeout.rawValue: 8,
         PreferenceKey.panelBarWidth.rawValue: 52,
-        PreferenceKey.showPanelPercentages.rawValue: true,
+        PreferenceKey.showPanelPercentages.rawValue: false,
         PreferenceKey.menuBarContent.rawValue: PanelDisplay.icon.rawValue,
-        PreferenceKey.runwayWarningHours.rawValue: 72,
         PreferenceKey.showScopedLimits.rawValue: true,
-        PreferenceKey.defaultCandidateFirst.rawValue: true,
     ]
 
     /// Emits the key that changed, so the app delegate can tell a reconnect from a redraw.
@@ -79,25 +74,15 @@ final class Preferences: ObservableObject {
     /// and macOS draws nothing at all rather than truncating an item that does not fit.
     var menuBarContent: PanelDisplay {
         get {
-            PanelDisplay(rawValue: store.string(forKey: PreferenceKey.menuBarContent.rawValue) ?? "")
-                ?? .icon
+            let saved = store.string(forKey: PreferenceKey.menuBarContent.rawValue) ?? ""
+            return saved == "runway" ? .compact : PanelDisplay(rawValue: saved) ?? .icon
         }
         set { write(.menuBarContent, newValue.rawValue) }
-    }
-
-    var runwayWarningHours: Int {
-        get { clamped(.runwayWarningHours, to: Self.runwayWarningHoursRange) }
-        set { write(.runwayWarningHours, newValue.clamped(to: Self.runwayWarningHoursRange)) }
     }
 
     var showScopedLimits: Bool {
         get { store.bool(forKey: PreferenceKey.showScopedLimits.rawValue) }
         set { write(.showScopedLimits, newValue) }
-    }
-
-    var defaultCandidateFirst: Bool {
-        get { store.bool(forKey: PreferenceKey.defaultCandidateFirst.rawValue) }
-        set { write(.defaultCandidateFirst, newValue) }
     }
 
     private func clamped(_ key: PreferenceKey, to range: ClosedRange<Int>) -> Int {

@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popoverModel: PopoverModel?
     private var cancellables = Set<AnyCancellable>()
     private var latestSnapshot: RefreshSnapshot?
+    private let displayScheduler = PollScheduler()
     private var connectionChange: Task<Void, Never>?
 
     /// Set only when the popover closes because of a mouse-down on the status button, and consumed
@@ -44,14 +45,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let now = Date()
-        let view = UsageModel.buildView(
-            accounts: nil, status: nil, runway: nil, options: viewOptions(), localNow: now)
+        let snapshot = RefreshSnapshot.loading(baseURL: preferences.apiURL)
+        let view = snapshot.rendered(options: viewOptions(), now: now)
         let panel = PanelContent.make(
-            state: .notLoaded, view: view, lastError: "", lastRunwayError: "", lastSuccess: nil,
-            display: preferences.menuBarContent, now: now)
-        let detail = DetailContent.make(
-            state: .notLoaded, view: view, baseURL: preferences.apiURL, lastError: "",
-            lastRunwayError: "", lastSuccess: nil, now: now)
+            snapshot: snapshot, view: view, display: preferences.menuBarContent, now: now)
+        let detail = DetailContent.make(snapshot: snapshot, view: view, now: now)
 
         let panelView = PanelItemView(
             content: panel,
@@ -101,28 +99,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             Task { await self.coordinator.refresh() }
         }
 
+        displayScheduler.schedule(intervalSeconds: 1) { [weak self] in
+            guard let self else { return }
+            if let latestSnapshot = self.latestSnapshot { self.render(latestSnapshot) }
+            Task { await self.coordinator.refresh(workloadsOnly: true) }
+        }
+
         Task { [weak self] in
             guard let self else { return }
             await self.coordinator.setHandlers(
                 started: { [weak self] snapshot in await self?.render(snapshot) },
                 finished: { [weak self] snapshot in await self?.render(snapshot) }
             )
-            await self.coordinator.refresh(forceRunway: true)
+            await self.coordinator.refresh(forceWorkloads: true)
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         scheduler.cancel()
+        displayScheduler.cancel()
     }
 
     // MARK: - Rendering
 
     private func viewOptions() -> ViewOptions {
-        ViewOptions(
-            showScoped: preferences.showScopedLimits,
-            defaultCandidateFirst: preferences.defaultCandidateFirst,
-            runwayWarningHours: TimeInterval(preferences.runwayWarningHours)
-        )
+        ViewOptions(showScoped: preferences.showScopedLimits)
     }
 
     private func render(_ snapshot: RefreshSnapshot) {
@@ -131,14 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let rendered = snapshot.rendered(options: viewOptions(), now: now)
 
         let panel = PanelContent.make(
-            state: rendered.state,
-            view: rendered.view,
-            lastError: rendered.lastError,
-            lastRunwayError: rendered.lastRunwayError,
-            lastSuccess: rendered.lastSuccess,
-            display: preferences.menuBarContent,
-            now: now
-        )
+            snapshot: snapshot, view: rendered, display: preferences.menuBarContent, now: now)
         panelView?.update(
             content: panel,
             barWidth: CGFloat(preferences.panelBarWidth),
@@ -150,25 +144,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         statusItem?.button?.toolTip = panel.tooltip
         statusItem?.button?.setAccessibilityLabel(Self.accessibilityLabel(panel))
 
-        popoverModel?.content = DetailContent.make(
-            state: rendered.state,
-            view: rendered.view,
-            baseURL: preferences.apiURL,
-            lastError: rendered.lastError,
-            lastRunwayError: rendered.lastRunwayError,
-            lastSuccess: rendered.lastSuccess,
-            now: now
-        )
-        popoverModel?.isRefreshing = rendered.isRefreshing
+        let detail = DetailContent.make(snapshot: snapshot, view: rendered, now: now)
+        if popoverModel?.content != detail { popoverModel?.content = detail }
+        if popoverModel?.isRefreshing != snapshot.isRefreshing {
+            popoverModel?.isRefreshing = snapshot.isRefreshing
+        }
         popoverModel?.canOpenDashboard = !Formatting.normalizeBaseUrl(preferences.apiURL).isEmpty
     }
 
     private static func accessibilityLabel(_ content: PanelContent) -> String {
-        var parts = [content.runwayText]
-        for meter in content.meters {
-            parts.append("\(meter.label) \(meter.percent) percent, \(meter.severity.rawValue)")
-        }
-        return "Clankermux usage. " + parts.joined(separator: ", ")
+        "Clankermux usage, \(content.severity.rawValue). Open workload details."
     }
 
     // MARK: - Settings
@@ -194,13 +179,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             // The coordinator discards the older refresh once the newer reconfiguration lands.
             Task { [coordinator] in
                 await change.value
-                await coordinator.refresh(forceRunway: true)
+                await coordinator.refresh(forceWorkloads: true)
             }
         case .refreshInterval:
             scheduler.reschedule(intervalSeconds: TimeInterval(preferences.refreshInterval))
-        case .panelBarWidth, .showPanelPercentages, .menuBarContent, .runwayWarningHours,
-            .showScopedLimits,
-            .defaultCandidateFirst:
+        case .panelBarWidth, .showPanelPercentages, .menuBarContent, .showScopedLimits:
             if let latestSnapshot { render(latestSnapshot) }
         }
     }
@@ -249,7 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func refreshNow() {
-        Task { [coordinator] in await coordinator.refresh(forceRunway: true) }
+        Task { [coordinator] in await coordinator.refresh(forceWorkloads: true) }
     }
 
     private func openDashboard() {

@@ -13,7 +13,8 @@ let package = Package(
         ),
         .testTarget(
             name: "ClankermuxCoreTests",
-            dependencies: ["ClankermuxCore"]
+            dependencies: ["ClankermuxCore"],
+            resources: [.copy("Examples")]
         ),
         .testTarget(
             name: "ClankermuxUsageTests",

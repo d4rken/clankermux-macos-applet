@@ -11,22 +11,48 @@ import Testing
 @MainActor
 @Suite("Popover view")
 struct PopoverViewTests {
+    @Test("render the workload popover for visual inspection when requested")
+    func preview() throws {
+        guard let directory = ProcessInfo.processInfo.environment["CLANKERMUX_PREVIEW_DIR"] else {
+            return
+        }
+        for (name, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
+            let model = PopoverModel(
+                content: detail(accounts: 4), isRefreshing: false,
+                canOpenDashboard: true, maxContentHeight: 2000)
+            let content = PopoverView(
+                model: model, onRefresh: {}, onOpenDashboard: {}, onOpenSettings: {}, onQuit: {}
+            )
+            .environment(\.colorScheme, scheme)
+            .background(scheme == .light ? Color.white : Color(white: 0.12))
+            let host = NSHostingView(rootView: content)
+            host.appearance = NSAppearance(named: scheme == .light ? .aqua : .darkAqua)
+            host.frame = NSRect(origin: .zero, size: host.fittingSize)
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+            host.frame.size = host.fittingSize
+            host.layoutSubtreeIfNeeded()
+            let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: rep)
+            let data = try #require(rep.representation(using: .png, properties: [:]))
+            try data.write(
+                to: URL(fileURLWithPath: directory).appendingPathComponent("popover-\(name).png"))
+        }
+    }
 
-    @Test("a four-account popover fits a laptop screen without scrolling")
+    @Test("a four-account popover respects the laptop height cap including its footer")
     func fitsALaptopScreen() {
         let size = fittingSize(accounts: 4)
 
-        // A 14-inch MacBook Pro has 982 points of height, less the menu bar. If four accounts do
-        // not fit that, the common case is scrolling, which is what this redesign set out to stop.
-        #expect(size.height < 900)
-        #expect(size.width <= 460)
+        #expect(size.height < 550)
+        #expect(size.width == 620)
     }
 
     @Test("a six-account popover, the shape of a real server, still fits a laptop screen")
     func realisticSixAccountsFit() {
         let size = fittingSize(accounts: 6)
         // The cap on a 14-inch MacBook Pro is 912 points: 944 visible, less room for the arrow.
-        #expect(size.height <= PopoverMetrics.maxHeight(screenVisibleHeight: 944))
+        #expect(size.height < 700)
     }
 
     @Test("the popover grows with account count rather than clipping")
@@ -94,58 +120,9 @@ struct PopoverViewTests {
     }
 
     private func detail(accounts count: Int) -> DetailContent {
-        let now = Date()
-
-        func window(_ kind: String, _ label: String, _ pct: Double, _ resetIn: Double) -> UsageWindow
-        {
-            UsageWindow(
-                kind: kind, label: label, utilizationPct: pct,
-                observedAt: FlexibleTimestamp(date: now),
-                resetsAt: FlexibleTimestamp(date: now.addingTimeInterval(resetIn)))
-        }
-
-        let accounts = (1...max(1, count)).map { index in
-            Account(
-                id: "a\(index)", name: "Account \(index)",
-                provider: index > 2 ? "codex" : "anthropic",
-                isDefaultCandidate: index == 1,
-                availability: Availability(state: "available"),
-                credential: Credential(state: "valid"),
-                measurementState: "fresh",
-                windows: [
-                    window("five_hour", "5-hour", 5, 3600),
-                    window("seven_day", "Weekly", 49, 200_000),
-                    window("weekly_scoped", "Fable", 67, 200_000),
-                ])
-        }
-
-        let status = StatusResponse(
-            schema: "clankermux.public.status.v1", generatedAt: FlexibleTimestamp(date: now),
-            status: "ok",
-            pool: PoolInfo(
-                configured: Double(accounts.count), configuredPresence: .present,
-                defaultRoutable: Double(accounts.count), defaultRoutablePresence: .present),
-            usage: UsageSection(
-                fiveHour: UsageAggregate(
-                    meanUtilizationPct: 5, contributingAccountCount: Double(accounts.count),
-                    earliestResetsAt: FlexibleTimestamp(date: now.addingTimeInterval(3600))),
-                sevenDay: UsageAggregate(
-                    meanUtilizationPct: 49, contributingAccountCount: Double(accounts.count),
-                    earliestResetsAt: FlexibleTimestamp(date: now.addingTimeInterval(200_000)))))
-
-        let runway = RunwayResponse(
-            schema: "clankermux.public.runway.v1", generatedAt: FlexibleTimestamp(date: now),
-            horizonMs: 14 * 24 * 3600 * 1000,
-            coverage: Coverage(activeKeyCount: 2, statedKeyCount: 2, unobservedKeyCount: 0),
-            worstStatedOutcome: StatedOutcome(
-                kind: "runway",
-                exhaustsAt: FlexibleTimestamp(date: now.addingTimeInterval(5 * 24 * 3600))))
-
-        let view = UsageModel.buildView(
-            accounts: accounts, status: status, runway: runway, options: ViewOptions(),
-            localNow: now)
+        let snapshot = UIFixtures.snapshot(accounts: count)
         return DetailContent.make(
-            state: .loaded(view.accounts), view: view, baseURL: "http://127.0.0.1:8080",
-            lastError: "", lastRunwayError: "", lastSuccess: now, now: now)
+            snapshot: snapshot, view: snapshot.rendered(options: ViewOptions(), now: Date()),
+            now: Date())
     }
 }

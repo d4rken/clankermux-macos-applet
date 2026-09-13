@@ -44,7 +44,7 @@ extension Error {
 public protocol ApiClientProtocol: Sendable {
     func fetchStatus(baseURL: String, timeout: TimeInterval) async throws -> StatusResponse
     func fetchAccounts(baseURL: String, timeout: TimeInterval) async throws -> AccountsResponse
-    func fetchRunway(baseURL: String, timeout: TimeInterval) async throws -> RunwayResponse
+    func fetchWorkloads(baseURL: String, timeout: TimeInterval) async throws -> WorkloadsResponse
 }
 
 /// Reads the three public endpoints over `URLSession`.
@@ -70,7 +70,7 @@ public struct URLSessionApiClient: ApiClientProtocol {
             baseURL: baseURL, path: "/public/v1/status", timeout: timeout, label: "status")
         try validate(
             response.schema, expected: "clankermux.public.status.v1", label: "status",
-            shape: response.pool != nil)
+            shape: response.accounts != nil && response.serviceState != nil)
         return response
     }
 
@@ -85,12 +85,14 @@ public struct URLSessionApiClient: ApiClientProtocol {
         return response
     }
 
-    public func fetchRunway(baseURL: String, timeout: TimeInterval) async throws -> RunwayResponse {
-        let response: RunwayResponse = try await get(
-            baseURL: baseURL, path: "/public/v1/runway", timeout: timeout, label: "runway")
+    public func fetchWorkloads(baseURL: String, timeout: TimeInterval) async throws
+        -> WorkloadsResponse
+    {
+        let response: WorkloadsResponse = try await get(
+            baseURL: baseURL, path: "/public/v1/workloads", timeout: timeout, label: "workloads")
         try validate(
-            response.schema, expected: "clankermux.public.runway.v1", label: "runway",
-            shape: response.coverage != nil)
+            response.schema, expected: "clankermux.public.workloads.v1", label: "workloads",
+            shape: response.workloads != nil)
         return response
     }
 

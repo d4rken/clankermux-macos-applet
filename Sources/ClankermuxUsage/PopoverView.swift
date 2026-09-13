@@ -51,7 +51,7 @@ private struct Card<Content: View>: View {
     var body: some View {
         content
             .padding(.horizontal, 9)
-            .padding(.vertical, 7)
+            .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 7).fill(.quaternary.opacity(0.35)))
     }
@@ -76,55 +76,73 @@ struct InfoBlockView: View {
     }
 }
 
-/// The runway headline, given the visual weight it has in the menu bar.
-struct RunwayHeadlineView: View {
-    let block: InfoBlock
+struct PaceBar: View {
+    let signal: PaceSignal
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(block.title)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(block.style.titleColor)
-            if !block.subtitle.isEmpty {
-                Text(block.subtitle)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(block.style.subtitleColor)
-                    .fixedSize(horizontal: false, vertical: true)
+        GeometryReader { geometry in
+            let half = geometry.size.width / 2
+            let width = half * CGFloat(min(100, abs(signal.fill))) / 100
+            ZStack(alignment: .leading) {
+                Capsule().fill(.quaternary)
+                Capsule().fill(signal.severity.accent)
+                    .frame(width: width)
+                    .offset(x: signal.fill < 0 ? half - width : half)
+                Rectangle().fill(.secondary)
+                    .frame(width: 1, height: 10)
+                    .offset(x: half)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel(signal.value)
     }
 }
 
-struct PoolSummaryView: View {
-    let block: PoolSummaryBlock
+struct WorkloadBlockView: View {
+    let row: WorkloadRow
+    @State private var expanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(block.title).font(.system(size: 11, weight: .semibold))
-            Grid(alignment: .leading, horizontalSpacing: 7, verticalSpacing: 4) {
-                ForEach(block.rows) { row in
-                    GridRow {
-                        Text(row.label)
-                            .font(.system(size: 11, weight: .medium))
-                            .frame(width: 52, alignment: .leading)
-                        UsageBar(percent: row.usedPercent, severity: row.severity)
-                            .frame(width: 116, height: 5)
-                        Text("\(row.usedPercent)%")
-                            .font(.system(size: 11).monospacedDigit())
-                            .frame(width: 32, alignment: .trailing)
-                        Text(row.detail)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Button {
+                    expanded.toggle()
+                } label: {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(width: 12)
                 }
+                .buttonStyle(.plain)
+                .help("Forecast details")
+                .accessibilityLabel("Forecast details for " + row.label)
+                .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+                Text(row.label).font(.system(size: 12, weight: .semibold))
+                    .frame(width: 64, alignment: .leading)
+                    .lineLimit(1).help(row.label)
+                Text(row.summary).font(.system(size: 10.5, weight: .medium))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                PaceBar(signal: row.signal).frame(width: 74, height: 7)
+                Text(row.signal.value)
+                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(row.signal.severity.accent)
+                    .frame(width: 115, alignment: .trailing)
             }
-            Text(block.subtitle)
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 12) {
+                Text(row.availabilityText).font(.system(size: 10.5))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(row.coverageText).font(.system(size: 10.5)).foregroundStyle(.secondary)
+            }
+            .padding(.leading, 20)
+            if expanded {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(row.detail).font(.system(size: 10.5))
+                    Text(row.freshnessText).font(.system(size: 9.5))
+                }
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 20)
+            }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -132,58 +150,39 @@ struct AccountBlockView: View {
     let block: AccountBlock
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text(block.name).font(.system(size: 12, weight: .semibold))
-                if block.isDefaultCandidate {
-                    Text("DEFAULT")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Color(nsColor: .systemGreen))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(
-                            Capsule().fill(Color(nsColor: .systemGreen).opacity(0.15))
-                        )
-                }
-                Spacer(minLength: 4)
-                Text(block.provider)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-            }
-            HStack(spacing: 5) {
+                    .lineLimit(1).help(block.name)
                 Circle().fill(block.stateKey.accent).frame(width: 5, height: 5)
-                Text(block.stateText)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                Text(block.stateText).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+                Text(block.provider).font(.system(size: 10)).foregroundStyle(.secondary)
             }
-            if let emptyText = block.emptyText {
-                Text(emptyText)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.tertiary)
-            } else {
-                Grid(alignment: .leading, horizontalSpacing: 7, verticalSpacing: 3) {
-                    ForEach(block.windows) { window in
-                        GridRow {
-                            Text(window.label)
-                                .font(.system(size: 10.5))
-                                .italic(window.scoped)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 52, alignment: .leading)
-                            UsageBar(percent: window.percent, severity: window.severity)
-                                .frame(width: 84, height: 5)
-                            Text(window.percentText)
-                                .font(.system(size: 10.5).monospacedDigit())
-                                .frame(width: 32, alignment: .trailing)
-                            Text(window.forecastText)
-                                .font(.system(size: 10).monospacedDigit())
-                                .foregroundStyle(window.severity.accent)
-                                .frame(width: 38, alignment: .leading)
-                            Text(window.resetText)
-                                .font(.system(size: 10))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                        }
+            if block.stateKey != .paused {
+                if let emptyText = block.emptyText {
+                    Text(emptyText).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                }
+                ForEach(block.windows) { window in
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text(window.label).font(.system(size: 10.5)).italic(window.scoped)
+                            .frame(width: 52, alignment: .leading)
+                        UsageBar(percent: window.percent ?? 0, severity: window.severity)
+                            .frame(width: 84, height: 5)
+                            .alignmentGuide(.firstTextBaseline) { dimensions in
+                                dimensions[VerticalAlignment.center]
+                            }
+                        Text(window.percent.map { "\($0)%" } ?? "–")
+                            .font(.system(size: 10.5).monospacedDigit())
+                            .frame(width: 32, alignment: .trailing)
+                        Text(window.forecastText).font(.system(size: 10)).foregroundStyle(
+                            .secondary
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        Text(window.resetText).font(.system(size: 10)).foregroundStyle(.secondary)
+                            .frame(width: 75, alignment: .trailing)
                     }
                 }
             }
@@ -231,32 +230,29 @@ struct PopoverView: View {
     }
 
     private var sections: some View {
-        VStack(alignment: .leading, spacing: 7) {
-                    if let placeholder = model.content.placeholder {
-                        InfoBlockView(block: placeholder)
-                    }
-                    if let runway = model.content.runway {
-                        Card { RunwayHeadlineView(block: runway) }
-                    }
-                    if let header = model.content.header {
-                        InfoBlockView(block: header)
-                            .padding(.horizontal, 2)
-                    }
-                    ForEach(model.content.overloads) { overload in
-                        Card { InfoBlockView(block: overload) }
-                    }
-                    if let pools = model.content.pools {
-                        Card { PoolSummaryView(block: pools) }
-                    }
-                    ForEach(model.content.accounts) { account in
-                        Card { AccountBlockView(block: account) }
-                    }
-                    if let notice = model.content.emptyAccountsNotice {
-                        InfoBlockView(block: notice)
-                    }
-                    if let error = model.content.errorNotice {
-                        Card { InfoBlockView(block: error) }
-                    }
+        VStack(alignment: .leading, spacing: 5) {
+            if let placeholder = model.content.placeholder {
+                InfoBlockView(block: placeholder)
+            }
+            if let header = model.content.header {
+                InfoBlockView(block: header).padding(.horizontal, 2)
+            }
+            ForEach(model.content.workloads) { row in
+                Card { WorkloadBlockView(row: row) }
+            }
+            ForEach(model.content.notices) { notice in
+                Card { InfoBlockView(block: notice) }
+            }
+            ForEach(model.content.accounts) { account in
+                Card { AccountBlockView(block: account) }
+            }
+            if !model.content.workloads.isEmpty {
+                Text(
+                    "Pace estimates assume the current distribution of consumption across accounts. Availability is for fresh, unpinned, nominal-sized requests; 5-hour limits can interrupt separately."
+                )
+                .font(.system(size: 9.5)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(10)
         .background(
@@ -273,22 +269,22 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack(spacing: 4) {
-                Button(action: onRefresh) {
-                    Label(
-                        model.isRefreshing ? "Refreshing…" : "Refresh",
-                        systemImage: "arrow.clockwise")
-                }
-                .disabled(model.isRefreshing)
-
-                Spacer(minLength: 8)
-
-                iconButton("safari", help: "Open dashboard", action: onOpenDashboard)
-                    .disabled(!model.canOpenDashboard)
-                iconButton("gearshape", help: "Settings", action: onOpenSettings)
-                // An agent app has no Dock icon and no application menu, so quitting needs an
-                // explicit control.
-                iconButton("power", help: "Quit Clankermux Usage", action: onQuit)
+            Button(action: onRefresh) {
+                Label(
+                    model.isRefreshing ? "Refreshing…" : "Refresh",
+                    systemImage: "arrow.clockwise")
             }
+            .disabled(model.isRefreshing)
+
+            Spacer(minLength: 8)
+
+            iconButton("safari", help: "Open dashboard", action: onOpenDashboard)
+                .disabled(!model.canOpenDashboard)
+            iconButton("gearshape", help: "Settings", action: onOpenSettings)
+            // An agent app has no Dock icon and no application menu, so quitting needs an
+            // explicit control.
+            iconButton("power", help: "Quit Clankermux Usage", action: onQuit)
+        }
         .controlSize(.small)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)

@@ -2,75 +2,78 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-A native macOS menu bar app for monitoring the accounts behind a
-[Clankermux](https://github.com/d4rken/clankermux) proxy. It is a behavioural port of the
-[Cinnamon panel applet](https://github.com/d4rken/clankermux-mint-applet): same data sources, same
-panel content, same popup detail, same settings and defaults.
+A native macOS menu bar app for monitoring a
+[Clankermux](https://github.com/d4rken/clankermux) proxy. The workload pace bars
+follow the [Linux Mint applet](https://github.com/d4rken/clankermux-mint-applet),
+using the current public workload API introduced in Clankermux 2026.9.36.
 
-The menu bar shows a gauge tinted by state, green above the configured runway warning duration,
-orange below it, and red when the pool is out of quota or nothing is routable. Under Settings the
-item can instead show Clankermux's projected quota runway:
+The menu bar can show an icon, compact pace bars, or full-size directional workload bars:
 
 ```text
-R 5d 18h
+Claude [ cut | add ]  GPT [ cut | add ]  Fable [ cut | add ]
 ```
 
-or the runway followed by server-computed mean utilization for the 5-hour, 7-day and
-model-specific quota pools:
+Bars extend left for a reduction in consumption and right for an increase.
+Each half represents a 50% change. These are pace estimates from the server,
+not remaining quota percentages or a suggested number of agents.
 
-```text
-R 5d 18h  5h [  5%]  7d [ 49%]  Fable [ 67%]
-```
+The icon remains the default because macOS may hide status items that do not
+fit the menu bar. **Compact pace bars** stack up to three bars vertically,
+with a workload initial beside each bar, using 52 points for three workloads.
+Additional workloads start another stack. Full names remain in the tooltip
+and popup. **Full-size pace bars** use the
+Linux-style label-and-bar layout. Exact percentages are optional in full-size
+mode; the tooltip and popover always show them. **Stale** and **Expired** remain
+visible in both bar modes.
 
-The icon is about 24 points wide, the runway about 106, and the full panel about 435. macOS gives a
-status item no room it has not got and draws nothing at all rather than truncating, so on a busy
-menu bar the wider forms can vanish entirely, which is why the icon is the default. Whichever form
-is showing, the tooltip and the popover carry the full detail.
+The popup uses a 620-point-wide layout with workload outlook and pacing on one
+row, availability and coverage on the next, and account forecasts beside their
+usage bars. Click a workload's chevron to expand its forecast details.
+Paused accounts show only their heading and status, without quota bars or forecasts.
+Menu-bar workloads are hidden when all accounts for their provider are paused.
+They reappear after an account resumes; rate-limited or exhausted accounts remain visible.
 
-When availability is degraded, the default-context account count appears as an exception beside the
-runway, for example `R 18h · 3/4!`. It stays out of the normal display because runway describes
-quota capacity while availability also includes pauses, cooldowns, credentials, and provider
-overloads.
+Click the item for:
 
-When the meters are switched on, unused model-specific quota families are omitted from the menu bar
-to conserve space, but remain available in the popover. Core 5-hour and 7-day meters remain visible
-at 0%.
+- workload weekly outlook, pace estimates, and the next reset checkpoint
+- current availability, independently of weekly subscription budget
+- modeled, idle, learning, and unreadable forecast coverage
+- account risk counts and conservative family bounds
+- per-account availability, credentials, usage bars, and window forecasts
+- computation and evidence ages, cached readings, and failed-feed notices
+- refresh, dashboard, settings, and quit actions
 
-Each percentage is the unweighted mean reported by Clankermux across accounts that supplied that
-window. The popover shows contributor and unknown-account counts so a partial mean cannot pass as
-full coverage. Click the item for:
+## Reading the pace bars
 
-- projected quota runway, model horizon, API-key coverage, and the account/window causing run-out
-- 5-hour and 7-day usage bars for every account
-- model-specific weekly limits such as Fable
-- per-window forecasts and reset countdowns where Clankermux has sufficient evidence
-- the default candidate for a fresh, unpinned, nominal-sized request
-- availability, credential, provider-overload, and measurement-freshness state
-- the last successful refresh time, so stale data is easy to spot
-- manual refresh, a shortcut to the Clankermux dashboard, settings, and quit
+Green indicates an estimated increase fits; orange indicates a reduction.
+A fully modeled, supported exhausted weekly budget is red. Missing, stale,
+expired, or unsupported advice is neutral.
 
-When Clankermux observes an upstream provider overload, the menu bar item gains an hourglass. The
-popover distinguishes provider-wide and model-scoped breakers, including open and half-open recovery
-states.
+A positive estimate is the last tested passing increase. **≥+50%** means the
+largest tested increase fits, not that 50% is an exact maximum. **−50% insufficient**
+means the tested cut did not suffice; it is not a recommended reduction.
 
-The runway is green above the configured warning duration, orange below it, and red when the pool is
-out of quota. Incomplete API-key coverage adds `*` and is always warning-colored: an unobserved key
-could have less runway than the stated projection. `>14d` means no run-out was found inside the
-server's 14-day modelling horizon; it never claims infinity.
+Family figures are conservative bounds. Fable overlaps Claude, so their
+capacities and percentages must not be added. Partial forecasts describe the
+modeled subset and withhold numeric pace advice. Idle accounts may still serve
+requests even though they have no burn evidence for forecasting.
 
-Usage bars turn orange at 80% and red at 100%. Individual forecast confidence remains visible in the
-popover; low-confidence exhaustion is never colored as certain.
+Weekly budget and availability have different denominators. Paid fallback may
+be available after subscription quota is exhausted, and 5-hour limits can
+interrupt work independently. Availability describes a fresh, unpinned,
+nominal-sized request. The forecast assumes the current distribution of burn
+across accounts; it does not redistribute demand after an account exhausts.
 
 ## Install
 
-Requires macOS 13 or newer and a Swift 6.1 toolchain (Xcode or the Command Line Tools).
+Requires macOS 13 or newer and a Swift 6.1 toolchain.
 
 ```sh
 make install
 ```
 
-That builds `Clankermux Usage.app`, signs it ad-hoc, and copies it into `~/Applications`. Launch it
-from there. The app has no Dock icon and no application menu: it lives entirely in the menu bar.
+This builds and signs `Clankermux Usage.app` ad-hoc and copies it to
+`~/Applications`. Launch it from there. The app lives entirely in the menu bar.
 
 To build the bundle without installing it:
 
@@ -78,49 +81,58 @@ To build the bundle without installing it:
 make app
 ```
 
-The default server is a Clankermux instance on the same machine:
+The default server is `http://127.0.0.1:8080`. Use **Settings…** to enter
+another HTTP or HTTPS URL, hostname, or IP address. The URL applies when you
+press Return or leave the field.
 
-```text
-http://127.0.0.1:8080
-```
+## API and refresh behavior
 
-Click the menu bar item and choose **Settings…** to enter a different hostname, IP address, or
-complete HTTP/HTTPS URL. The server URL applies when you press Return or leave the field, so a
-half-typed hostname is never polled. The settings window also controls the polling interval, request
-timeout, the menu bar meters, runway warning duration, and scoped-limit visibility.
-
-## API and security
-
-The app uses Clankermux's unauthenticated, read-only public widget API:
+The app uses three unauthenticated, read-only endpoints:
 
 - `GET /public/v1/status`
 - `GET /public/v1/accounts`
-- `GET /public/v1/runway`
+- `GET /public/v1/workloads`
 
-Status and accounts follow the configured refresh interval, which defaults to 30 seconds. The more
-expensive runway projection is cached and refreshed at most every five minutes, or immediately with
-**Refresh now**. These endpoints contain no personal identities, credential material, API-key
-metadata, or write access.
+Accounts and status follow the configured interval, defaulting to 30 seconds.
+Workloads refresh independently every 15 seconds. The server caches availability
+for about five seconds and weekly calculations for about sixty seconds.
+Failed workload requests back off from 30 seconds to a five-minute cap.
+Manual refresh bypasses backoff.
 
-The bundle sets `NSAllowsArbitraryLoads`. App Transport Security lets a private-range IP literal or a
-`.local` name load over plain HTTP without any exemption, but it blocks a qualified DNS hostname over
-HTTP, and `NSAllowsLocalNetworking` does not lift that. Since the applet this ports supports
-arbitrary HTTP hosts, arbitrary loads is what preserves it. Point the app at HTTPS if the traffic
-leaves your machine.
+Countdowns update every second. A newly expired weekly checkpoint requests a
+fresh snapshot; the app never advances a deadline or assumes quota recovered.
+Repeated copies of the same expired calculation do not trigger a request loop.
+
+Weekly and availability freshness use their own `computedAt` fields,
+not the envelope timestamp or the time a response arrived. Readings become
+stale after three minutes, on a failed fetch, or when their computation
+timestamp is missing. Cached readings stay in the popover, clearly marked.
+The oldest usage observation is shown separately from computation age.
+
+This version replaces the retired runway, pacing, and headroom feeds.
+It requires the current workload contract; it does not fall back to
+quota averages or removed endpoints. Saved “Runway” mode becomes “Compact pace bars”;
+the retired runway-warning and default-routing-candidate settings are removed.
+
+Account names are public in this API. Credentials, prompts, and response bodies
+are not exposed. The app performs no server writes.
+
+The bundle permits arbitrary HTTP hosts using `NSAllowsArbitraryLoads`.
+Use HTTPS when traffic leaves your machine.
 
 ## Settings
 
 | Setting | Default | Range |
 | --- | --- | --- |
 | Server URL | `http://127.0.0.1:8080` | |
-| Refresh every | 30 seconds | 10 to 900, in steps of 10 |
+| Refresh accounts/status | 30 seconds | 10 to 900, in steps of 10 |
 | Request timeout | 8 seconds | 2 to 60 |
-| Menu bar shows | Icon only | Icon only, Runway, or Runway and pool meters |
-| Width of each menu bar progress bar | 52 points | 30 to 100, in steps of 2 |
-| Show percentages beside menu bar bars | on | |
-| Warn when quota runway falls below | 72 hours | 1 to 336 |
+| Menu bar shows | Icon only | Icon, Compact pace bars, Full-size pace bars |
+| Width of each full-size pace bar | 52 points | 30 to 100, in steps of 2 |
+| Show percentages beside full-size bars | off | |
 | Show model-specific limits | on | |
-| Put the default routing candidate first | on | |
+
+Existing saved percentage preferences are preserved.
 
 ## Development
 
@@ -130,46 +142,10 @@ No third-party dependencies are required.
 make check test
 ```
 
-`ClankermuxCore` holds the entire domain layer and imports Foundation only, which keeps every rule
-runnable in a headless test process. `ClankermuxUsage` holds the AppKit and SwiftUI layer.
-
-## Differences from the Cinnamon applet
-
-Behaviour is otherwise identical. All but the last of these are deliberate:
-
-1. **The polling-source watchdog is not ported.** Its defences are specific to GJS: a thrown poll
-   callback permanently killing a repeating GLib source, and timer sources disappearing out from
-   under the applet. A main-queue `DispatchSourceTimer` owned by the app delegate has no external
-   remover and its handler cannot throw, so both failure modes are structurally absent. The
-   per-refresh request timeout is ported and behaves the same.
-2. **There is a Quit command.** Cinnamon removes an applet from the panel; an agent app with no Dock
-   icon needs its own way out.
-3. **Menu bar bars are drawn in a custom `NSView`** hosted by the status bar button, rather than St
-   widgets with a CSS stylesheet.
-4. **Severity colours come from the system palette** rather than the stylesheet's fixed hexes. The
-   green, orange and red meanings are preserved, and the colours adapt to light and dark menu bars.
-5. **Settings are a hand-built SwiftUI form**, since there is no `settings-schema.json` runtime. The
-   keys, defaults and ranges are identical.
-6. **The version starts at 1.0.0.** This is a new product with its own history, not a continuation of
-   the applet's version line.
-7. **The bundle identifier is `eu.darken.clankermux-usage`.**
-8. **An explicit `null` for `pool.configured` or `pool.defaultRoutable` is treated as missing.** The
-   applet renders 0 there, because JavaScript coerces `null` to `0` before its finiteness check.
-   That is a coercion accident rather than intent, so this port falls back to the derived account
-   count instead.
-9. **`NSAllowsArbitraryLoads` is set**, as described above.
-10. **A non-2xx response always reports its HTTP status and reason.** The applet parses the body
-    before it checks the status, so an error page that is not JSON reports a JSON parse error
-    instead of the status line. This port checks the status first and only decodes a 2xx body.
-11. **The menu bar shows an icon by default, not the panel.** A Cinnamon panel has room for the
-    runway and every pool meter side by side. The same content is about 435 points wide, and a
-    macOS menu bar holding a normal set of status items may have as little as 20 points to spare,
-    with macOS drawing nothing at all rather than truncating. The runway and the full panel are
-    therefore opt-in, and the tooltip and popover always carry the detail.
-12. **Releasing a click away from the menu bar item can swallow the next click.** Pressing the item
-    while the popover is open and then letting go somewhere else leaves the following click on the
-    item without effect, and a second click opens it again. This is a known limitation of this
-    version rather than intended behaviour.
+The Foundation-only core handles API decoding, presentation rules, and refresh
+coordination. AppKit draws the menu bar; SwiftUI renders the popover and settings.
+Tests cover the proxy's published JSON examples, freshness and deadline behavior,
+retry scheduling, partial request failures, and offscreen UI layout.
 
 ## License
 

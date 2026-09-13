@@ -19,12 +19,21 @@ struct PreferencesTests {
         #expect(preferences.refreshInterval == 30)
         #expect(preferences.requestTimeout == 8)
         #expect(preferences.panelBarWidth == 52)
-        #expect(preferences.showPanelPercentages)
+        #expect(!preferences.showPanelPercentages)
         // The icon is the only form guaranteed to fit a populated menu bar.
         #expect(preferences.menuBarContent == .icon)
-        #expect(preferences.runwayWarningHours == 72)
         #expect(preferences.showScopedLimits)
-        #expect(preferences.defaultCandidateFirst)
+    }
+
+    @Test("saved runway display migrates to pace summary")
+    func migratesRunway() {
+        let store = TemporaryDefaults()
+        defer { store.remove() }
+        store.defaults.set("runway", forKey: PreferenceKey.menuBarContent.rawValue)
+        let preferences = Preferences(store: store.defaults)
+        #expect(preferences.menuBarContent == .compact)
+        preferences.menuBarContent = .full
+        #expect(preferences.menuBarContent == .full)
     }
 
     @Test("every schema key is registered")
@@ -43,13 +52,11 @@ struct PreferencesTests {
         store.defaults.set(0, forKey: PreferenceKey.refreshInterval.rawValue)
         store.defaults.set(9_000, forKey: PreferenceKey.requestTimeout.rawValue)
         store.defaults.set(1, forKey: PreferenceKey.panelBarWidth.rawValue)
-        store.defaults.set(-4, forKey: PreferenceKey.runwayWarningHours.rawValue)
         let preferences = Preferences(store: store.defaults)
 
         #expect(preferences.refreshInterval == 10)
         #expect(preferences.requestTimeout == 60)
         #expect(preferences.panelBarWidth == 30)
-        #expect(preferences.runwayWarningHours == 1)
     }
 
     @Test("writes are clamped before they are stored")
@@ -61,12 +68,10 @@ struct PreferencesTests {
         preferences.refreshInterval = 5
         preferences.requestTimeout = 900
         preferences.panelBarWidth = 400
-        preferences.runwayWarningHours = 0
 
         #expect(store.defaults.integer(forKey: PreferenceKey.refreshInterval.rawValue) == 10)
         #expect(store.defaults.integer(forKey: PreferenceKey.requestTimeout.rawValue) == 60)
         #expect(store.defaults.integer(forKey: PreferenceKey.panelBarWidth.rawValue) == 100)
-        #expect(store.defaults.integer(forKey: PreferenceKey.runwayWarningHours.rawValue) == 1)
     }
 
     @Test("values round-trip through the store")
@@ -78,14 +83,12 @@ struct PreferencesTests {
         preferences.apiURL = "http://proxy.example.test:8080"
         preferences.showPanelPercentages = false
         preferences.showScopedLimits = false
-        preferences.defaultCandidateFirst = false
         preferences.panelBarWidth = 64
 
         let reopened = Preferences(store: store.defaults)
         #expect(reopened.apiURL == "http://proxy.example.test:8080")
         #expect(!reopened.showPanelPercentages)
         #expect(!reopened.showScopedLimits)
-        #expect(!reopened.defaultCandidateFirst)
         #expect(reopened.panelBarWidth == 64)
     }
 
