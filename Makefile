@@ -19,6 +19,7 @@ app:
 	mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Resources"
 	cp ".build/release/$(EXECUTABLE)" "$(CONTENTS)/MacOS/$(EXECUTABLE)"
 	cp Resources/Info.plist "$(CONTENTS)/Info.plist"
+	cp Resources/ProviderMarks-ATTRIBUTION.md "$(CONTENTS)/Resources/ProviderMarks-ATTRIBUTION.md"
 	codesign --force --sign - "$(APP_BUNDLE)"
 	@echo "Built $(APP_BUNDLE)"
 
