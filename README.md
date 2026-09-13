@@ -14,7 +14,7 @@ C [ cut | add ]        stacked pace bars
 GPT 62%  Claude 48%    weekly usage
 ```
 
-**Stacked pace bars** is the default and the narrower form: up to three bars
+**Stacked pace bars** is the narrower form: up to three bars
 stacked vertically with a workload initial beside each, using 52 points for
 three workloads. Additional workloads start another stack. Bars extend left for
 a reduction in consumption and right for an increase, each half representing a
@@ -22,9 +22,9 @@ a reduction in consumption and right for an increase, each half representing a
 percentages or a suggested number of agents. **Stale** and **Expired** stay
 visible as text.
 
-**Weekly usage** draws a provider mark and the weekly percentage for each
-workload, averaged across that provider's accounts with equal weight per
-account. Accounts without a readable percentage are left out of the average
+**Weekly usage** is the default. It draws a provider mark and the weekly
+percentage for each workload, averaged across that provider's accounts with
+equal weight per account. Accounts without a readable percentage are left out of the average
 rather than counted as zero, and a `*` marks a partial or cached reading.
 Paused accounts still count, because their quota is still spent. macOS may hide
 a status item that does not fit the menu bar, and this form needs roughly 180
@@ -36,9 +36,9 @@ both forms.
 The popup uses a 620-point-wide layout: one workload summary line each, with
 availability counts on the right, then account forecasts beside their usage
 bars. Paused accounts show only their heading and status, without quota bars or
-forecasts. Menu-bar pace bars are hidden when all accounts for their provider
-are paused. They reappear after an account resumes; rate-limited or exhausted
-accounts remain visible.
+forecasts. A provider whose accounts are all paused drops out of the menu bar
+and out of the popup's summary lines, but keeps its account entries. It returns
+after an account resumes; rate-limited or exhausted accounts remain visible.
 
 Click the item for:
 
@@ -122,8 +122,8 @@ against the server's does not mark fresh readings cached.
 This version replaces the retired runway, pacing, and headroom feeds.
 It requires the current workload contract; it does not fall back to
 quota averages or removed endpoints. Saved “Runway”, “Icon only” and
-“Full-size pace bars” modes become “Stacked pace bars”; the retired pace-bar
-width and percentage settings are removed.
+“Full-size pace bars” modes fall back to the current default; the retired
+pace-bar width and percentage settings are removed.
 
 Account names are public in this API. Credentials, prompts, and response bodies
 are not exposed. The app performs no server writes.
@@ -138,7 +138,7 @@ Use HTTPS when traffic leaves your machine.
 | Server URL | `http://127.0.0.1:8080` | |
 | Refresh accounts and status | 30 seconds | 10 to 900, in steps of 10 |
 | Request timeout | 8 seconds | 2 to 60 |
-| Menu bar shows | Stacked pace bars | Stacked pace bars, Weekly usage |
+| Menu bar shows | Weekly usage | Stacked pace bars, Weekly usage |
 | Show model-family indicators and utilization bars | on | |
 
 ## Development

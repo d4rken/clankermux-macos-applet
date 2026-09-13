@@ -18,21 +18,22 @@ struct PreferencesTests {
         #expect(preferences.apiURL == "http://127.0.0.1:8080")
         #expect(preferences.refreshInterval == 30)
         #expect(preferences.requestTimeout == 8)
-        // The narrower of the two forms, so a populated menu bar still has room for it.
-        #expect(preferences.menuBarContent == .compact)
+        #expect(preferences.menuBarContent == .usage)
         #expect(preferences.showScopedLimits)
     }
 
-    @Test("retired display modes fall back to the stacked bars")
+    @Test("retired display modes fall back to the current default")
     func migratesRetiredModes() {
         for saved in ["runway", "icon", "full", "nonsense"] {
             let store = TemporaryDefaults()
             defer { store.remove() }
             store.defaults.set(saved, forKey: PreferenceKey.menuBarContent.rawValue)
             let preferences = Preferences(store: store.defaults)
-            #expect(preferences.menuBarContent == .compact, "\(saved) should migrate")
-            preferences.menuBarContent = .usage
-            #expect(preferences.menuBarContent == .usage)
+            #expect(
+                preferences.menuBarContent == Preferences.defaultMenuBarContent,
+                "\(saved) should migrate")
+            preferences.menuBarContent = .compact
+            #expect(preferences.menuBarContent == .compact)
         }
     }
 

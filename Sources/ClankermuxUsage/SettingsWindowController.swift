@@ -45,7 +45,14 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Clankermux API") {
-                TextField("Server URL (hostname or IP address)", text: $apiURLDraft)
+                // The label sits above the field rather than beside it: a Form's leading label
+                // column squeezes the address into a fraction of the window width.
+                Text("Server URL (hostname or IP address)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                TextField("127.0.0.1:8080", text: $apiURLDraft)
+                    .labelsHidden()
                     .focused($apiURLFocused)
                     .onSubmit { commitAPIURL() }
                     .onChange(of: apiURLFocused) { focused in

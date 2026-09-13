@@ -22,11 +22,13 @@ final class Preferences: ObservableObject {
     static let refreshIntervalRange = 10...900
     static let requestTimeoutRange = 2...60
 
+    static let defaultMenuBarContent = PanelDisplay.usage
+
     static let registrationDefaults: [String: Any] = [
         PreferenceKey.apiURL.rawValue: defaultAPIURL,
         PreferenceKey.refreshInterval.rawValue: 30,
         PreferenceKey.requestTimeout.rawValue: 8,
-        PreferenceKey.menuBarContent.rawValue: PanelDisplay.compact.rawValue,
+        PreferenceKey.menuBarContent.rawValue: defaultMenuBarContent.rawValue,
         PreferenceKey.showScopedLimits.rawValue: true,
     ]
 
@@ -55,14 +57,12 @@ final class Preferences: ObservableObject {
         set { write(.requestTimeout, newValue.clamped(to: Self.requestTimeoutRange)) }
     }
 
-    /// Defaults to the stacked bars, the narrower of the two forms: macOS draws nothing at all
-    /// rather than truncating a status item that does not fit a populated menu bar.
-    ///
-    /// Retired values, including the saved "runway" mode, land on the same default.
+    /// Retired values, including the saved "runway" mode, land on whatever the current default is
+    /// rather than on a mode of their own, so a removed form never survives as a special case.
     var menuBarContent: PanelDisplay {
         get {
             let saved = store.string(forKey: PreferenceKey.menuBarContent.rawValue) ?? ""
-            return PanelDisplay(rawValue: saved) ?? .compact
+            return PanelDisplay(rawValue: saved) ?? Self.defaultMenuBarContent
         }
         set { write(.menuBarContent, newValue.rawValue) }
     }

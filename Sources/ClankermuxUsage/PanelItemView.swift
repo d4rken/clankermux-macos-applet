@@ -10,8 +10,8 @@ import ClankermuxCore
 final class PanelItemView: NSView {
     typealias MarkProvider = @MainActor (ProviderMark) -> NSImage?
 
-    private static let itemSpacing: CGFloat = 10
-    private static let meterSpacing: CGFloat = 4
+    private static let itemSpacing: CGFloat = 5
+    private static let meterSpacing: CGFloat = 2
     private static let barCornerRadius: CGFloat = 4
     private static let horizontalInset: CGFloat = 6
     private static let compactColumnWidth: CGFloat = 52

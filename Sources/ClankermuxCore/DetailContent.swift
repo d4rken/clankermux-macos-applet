@@ -41,6 +41,7 @@ public struct DetailContent: Sendable, Equatable {
     public static func make(snapshot: RefreshSnapshot, view: UsageView, now: Date) -> DetailContent
     {
         let loaded = snapshot.accounts != nil || snapshot.workloads != nil
+        let workloads = UsageModel.activeWorkloads(snapshot: snapshot, view: view, now: now)
         let refresh = lastRefreshText(lastSuccess: snapshot.lastSuccess, now: now)
         let errors = [
             ("Accounts", snapshot.lastAccountsError, snapshot.accountsReceivedAt),
@@ -57,7 +58,7 @@ public struct DetailContent: Sendable, Equatable {
                     } ?? "\nNo cached reading"),
                 style: .warning)
         }
-        if snapshot.workloads != nil && view.workloads.isEmpty {
+        if snapshot.workloads != nil && workloads.isEmpty {
             notices.insert(
                 InfoBlock(
                     id: "no-workloads", title: "Pacing unavailable",
@@ -89,7 +90,7 @@ public struct DetailContent: Sendable, Equatable {
                 ? InfoBlock(
                     id: "header", title: "Clankermux usage", subtitle: "\(statusText)\n\(refresh)",
                     style: .normal) : nil,
-            workloads: view.workloads, notices: notices, accounts: view.accounts)
+            workloads: workloads, notices: notices, accounts: view.accounts)
     }
 
     public static func lastRefreshText(lastSuccess: Date?, now: Date) -> String {

@@ -34,6 +34,23 @@ struct DetailContentTests {
             })
     }
 
+    @Test("the summary drops providers whose accounts are all paused")
+    func pausedProvidersAreNotSummarized() {
+        var accounts = Fixtures.accounts()
+        for index in accounts.indices where accounts[index].provider == "anthropic" {
+            accounts[index].availability?.state = "paused"
+        }
+        let paused = make(Fixtures.snapshot(accounts: accounts))
+        #expect(!paused.workloads.contains { $0.label == "Claude" })
+        // The account blocks are a different question: a paused account still has a heading and a
+        // state to report, and hiding it there would look like the account had been removed.
+        #expect(paused.accounts.count == make(Fixtures.snapshot()).accounts.count)
+
+        // A stale or failed account list must not empty the summary.
+        let unknown = make(Fixtures.snapshot(accounts: accounts, accountsError: "offline"))
+        #expect(unknown.workloads.contains { $0.label == "Claude" })
+    }
+
     @Test("successful empty accounts differ from loading")
     func emptyAccounts() {
         let loaded = make(Fixtures.snapshot(accounts: []))

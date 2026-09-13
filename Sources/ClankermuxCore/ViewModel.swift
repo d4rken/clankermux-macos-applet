@@ -89,6 +89,33 @@ public enum UsageModel {
         return "\(Formatting.formatDuration(max(0, now.timeIntervalSince(date)) * 1000)) ago"
     }
 
+    /// Workload rows minus the providers whose accounts are every one of them paused.
+    ///
+    /// A paused provider has nothing to report about a weekly budget nobody is spending, so both
+    /// the menu bar and the popover summary drop it. Falls back to showing everything while the
+    /// account list is missing or stale, so a failed accounts fetch never silently empties the
+    /// display. A provider with no accounts at all is kept: that is a different fact from paused.
+    public static func activeWorkloads(snapshot: RefreshSnapshot, view: UsageView, now: Date)
+        -> [WorkloadRow]
+    {
+        let accountsAreCurrent =
+            snapshot.lastAccountsError.isEmpty
+            && snapshot.accountsReceivedAt.map {
+                now.timeIntervalSince($0) < staleInterval
+            } == true
+        return view.workloads.filter { row in
+            guard accountsAreCurrent, let accounts = snapshot.accounts else { return true }
+            let classID =
+                row.id.hasPrefix("class:")
+                ? row.id
+                : snapshot.workloads?.workloads?.first { $0.id == row.id }?.parentWorkloadId
+            guard let classID, classID.hasPrefix("class:") else { return true }
+            let provider = String(classID.dropFirst("class:".count))
+            let matching = accounts.filter { $0.provider == provider }
+            return matching.isEmpty || !matching.allSatisfy { $0.availability?.state == "paused" }
+        }
+    }
+
     public static func buildView(
         accounts: [Account]?, workloads: WorkloadsResponse?,
         workloadsFailed: Bool = false, accountsFailed: Bool = false,

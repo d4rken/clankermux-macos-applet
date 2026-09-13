@@ -37,7 +37,7 @@ public struct PanelContent: Sendable, Equatable {
 
         switch display {
         case .compact:
-            let rows = pacedRows(snapshot: snapshot, view: view, now: now)
+            let rows = UsageModel.activeWorkloads(snapshot: snapshot, view: view, now: now)
             severity = aggregate(rows.map { $0.signal.severity })
             let loading = snapshot.isRefreshing && snapshot.workloads == nil
             headline = rows.isEmpty ? (loading ? "Pace …" : "Pace –") : ""
@@ -89,27 +89,6 @@ public struct PanelContent: Sendable, Equatable {
             usageRows: usageRows, tooltip: tooltip.joined(separator: "\n"))
     }
 
-    /// Workload rows minus the providers whose accounts are all paused.
-    private static func pacedRows(snapshot: RefreshSnapshot, view: UsageView, now: Date)
-        -> [WorkloadRow]
-    {
-        let accountsAreCurrent =
-            snapshot.lastAccountsError.isEmpty
-            && snapshot.accountsReceivedAt.map {
-                now.timeIntervalSince($0) < UsageModel.staleInterval
-            } == true
-        return view.workloads.filter { row in
-            guard accountsAreCurrent, let accounts = snapshot.accounts else { return true }
-            let classID =
-                row.id.hasPrefix("class:")
-                ? row.id
-                : snapshot.workloads?.workloads?.first { $0.id == row.id }?.parentWorkloadId
-            guard let classID, classID.hasPrefix("class:") else { return true }
-            let provider = String(classID.dropFirst("class:".count))
-            let matching = accounts.filter { $0.provider == provider }
-            return matching.isEmpty || !matching.allSatisfy { $0.availability?.state == "paused" }
-        }
-    }
 
     private static func providerUsage(
         snapshot: RefreshSnapshot, view: UsageView, showScoped: Bool, now: Date
