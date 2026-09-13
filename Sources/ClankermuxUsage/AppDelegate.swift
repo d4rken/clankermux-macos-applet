@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let preferences: Preferences
     private let scheduler: any PollScheduling
     private let coordinator: RefreshCoordinator
+    private let connection: ConnectionStatus
     private let settingsWindow: SettingsWindowController
 
     private var statusItem: NSStatusItem?
@@ -31,10 +32,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     override init() {
         let preferences = Preferences()
+        let connection = ConnectionStatus()
         let timeout = TimeInterval(preferences.requestTimeout)
         self.preferences = preferences
+        self.connection = connection
         self.scheduler = PollScheduler()
-        self.settingsWindow = SettingsWindowController(preferences: preferences)
+        self.settingsWindow = SettingsWindowController(
+            preferences: preferences, connection: connection)
         self.coordinator = RefreshCoordinator(
             client: URLSessionApiClient(requestTimeout: timeout),
             baseURL: preferences.apiURL,
@@ -48,14 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let snapshot = RefreshSnapshot.loading(baseURL: preferences.apiURL)
         let view = snapshot.rendered(options: viewOptions(), now: now)
         let panel = PanelContent.make(
-            snapshot: snapshot, view: view, display: preferences.menuBarContent, now: now)
+            snapshot: snapshot, view: view, display: preferences.menuBarContent,
+            showScoped: preferences.showScopedLimits, now: now)
         let detail = DetailContent.make(snapshot: snapshot, view: view, now: now)
 
-        let panelView = PanelItemView(
-            content: panel,
-            barWidth: CGFloat(preferences.panelBarWidth),
-            showsPercentages: preferences.showPanelPercentages
-        )
+        let panelView = PanelItemView(content: panel)
         self.panelView = panelView
 
         let statusItem = NSStatusBar.system.statusItem(withLength: panelView.fittingWidth)
@@ -132,12 +133,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let rendered = snapshot.rendered(options: viewOptions(), now: now)
 
         let panel = PanelContent.make(
-            snapshot: snapshot, view: rendered, display: preferences.menuBarContent, now: now)
-        panelView?.update(
-            content: panel,
-            barWidth: CGFloat(preferences.panelBarWidth),
-            showsPercentages: preferences.showPanelPercentages
-        )
+            snapshot: snapshot, view: rendered, display: preferences.menuBarContent,
+            showScoped: preferences.showScopedLimits, now: now)
+        panelView?.update(content: panel)
         if let panelView {
             statusItem?.length = panelView.fittingWidth
         }
@@ -150,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             popoverModel?.isRefreshing = snapshot.isRefreshing
         }
         popoverModel?.canOpenDashboard = !Formatting.normalizeBaseUrl(preferences.apiURL).isEmpty
+        connection.update(snapshot, now: now)
     }
 
     private static func accessibilityLabel(_ content: PanelContent) -> String {
@@ -183,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             }
         case .refreshInterval:
             scheduler.reschedule(intervalSeconds: TimeInterval(preferences.refreshInterval))
-        case .panelBarWidth, .showPanelPercentages, .menuBarContent, .showScopedLimits:
+        case .menuBarContent, .showScopedLimits:
             if let latestSnapshot { render(latestSnapshot) }
         }
     }
@@ -239,5 +238,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let url = Formatting.normalizeBaseUrl(preferences.apiURL)
         guard !url.isEmpty, let target = URL(string: url) else { return }
         NSWorkspace.shared.open(target)
+    }
+}
+
+enum ConnectionState: String, Sendable, Equatable {
+    case connecting, connected, degraded, failed
+
+    var word: String {
+        switch self {
+        case .connecting: return "Connecting"
+        case .connected: return "Connected"
+        case .degraded: return "Degraded"
+        case .failed: return "Unavailable"
+        }
+    }
+
+    var severity: Severity {
+        switch self {
+        case .connecting: return .unknown
+        case .connected: return .normal
+        case .degraded: return .warning
+        case .failed: return .critical
+        }
+    }
+}
+
+/// What the settings window reports about the server it is pointed at.
+///
+/// Derived from the ordinary poll results, so the settings window needs no request path of its own
+/// and cannot disagree with what the menu bar is showing.
+@MainActor
+final class ConnectionStatus: ObservableObject {
+    @Published private(set) var state: ConnectionState = .connecting
+    @Published private(set) var detail: String = ""
+
+    func update(_ snapshot: RefreshSnapshot, now: Date) {
+        let errors = [
+            snapshot.lastAccountsError, snapshot.lastStatusError, snapshot.lastWorkloadsError,
+        ].filter { !$0.isEmpty }
+        let read = snapshot.lastSuccess != nil
+        let state: ConnectionState =
+            errors.isEmpty ? (read ? .connected : .connecting) : (read ? .degraded : .failed)
+
+        var lines: [String] = []
+        if state == .connected {
+            var service =
+                "Service \(Formatting.humanizeStatus(snapshot.status?.serviceState).lowercased())"
+            let version = (snapshot.status?.version ?? "").trimmingCharacters(
+                in: .whitespacesAndNewlines)
+            if !version.isEmpty { service += " · version \(version)" }
+            lines.append(service)
+        } else if !errors.isEmpty {
+            lines.append(errors.joined(separator: " · "))
+        }
+        lines.append(DetailContent.lastRefreshText(lastSuccess: snapshot.lastSuccess, now: now))
+
+        let detail = lines.joined(separator: "\n")
+        if self.state != state { self.state = state }
+        if self.detail != detail { self.detail = detail }
     }
 }

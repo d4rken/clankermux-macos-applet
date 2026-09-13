@@ -91,4 +91,30 @@ public enum Formatting {
         while url.hasSuffix("/") { url.removeLast() }
         return url
     }
+
+    /// Why a typed server address cannot be used, or nil when it can.
+    ///
+    /// Judged against the normalized form, so a bare `proxy.test:8080` passes exactly as the app
+    /// accepts it. A query or fragment fails because endpoint paths are appended to this address,
+    /// which would bury `/public/v1/accounts` inside the fragment.
+    public static func baseUrlProblem(_ value: String?) -> String? {
+        let draft = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if draft.isEmpty { return "Enter a server address, for example 127.0.0.1:8080" }
+        if let range = draft.lowercased().range(
+            of: "^[a-z][a-z0-9+.-]*://", options: .regularExpression)
+        {
+            let scheme = draft.lowercased()[range].dropLast("://".count)
+            if scheme != "http" && scheme != "https" {
+                return "Only http:// and https:// addresses work."
+            }
+        }
+        guard let url = URL(string: normalizeBaseUrl(draft)), let host = url.host, !host.isEmpty
+        else {
+            return "This is not a usable server address."
+        }
+        if url.query != nil || url.fragment != nil {
+            return "Drop the query and fragment: endpoint paths are appended to this address."
+        }
+        return nil
+    }
 }

@@ -2,9 +2,33 @@ import AppKit
 import ClankermuxCore
 import SwiftUI
 
-/// The settings form, in the same two groups as the Cinnamon `settings-schema.json`.
+/// The live connection row: a severity dot, a status word, and what the last poll reported.
+struct ConnectionStatusView: View {
+    @ObservedObject var connection: ConnectionStatus
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle().fill(connection.state.severity.accent).frame(width: 7, height: 7)
+                Text(connection.state.word).font(.system(size: 12, weight: .semibold))
+            }
+            if !connection.detail.isEmpty {
+                Text(connection.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Connection \(connection.state.word). \(connection.detail)")
+    }
+}
+
+/// The settings form, in the same groups as the Cinnamon `settings-schema.json`.
 struct SettingsView: View {
     @ObservedObject var preferences: Preferences
+    @ObservedObject var connection: ConnectionStatus
 
     /// The URL is edited locally and committed on Return or on leaving the field. Writing it per
     /// keystroke would reconnect on every character, dropping the cached data and polling
@@ -12,8 +36,9 @@ struct SettingsView: View {
     @State private var apiURLDraft: String
     @FocusState private var apiURLFocused: Bool
 
-    init(preferences: Preferences) {
+    init(preferences: Preferences, connection: ConnectionStatus) {
         self.preferences = preferences
+        self.connection = connection
         _apiURLDraft = State(initialValue: preferences.apiURL)
     }
 
@@ -32,8 +57,15 @@ struct SettingsView: View {
                     .help(
                         "Base URL of Clankermux's public widget API, for example http://127.0.0.1:8080 or http://clankermux.example.test:8080"
                     )
+                if let problem = Formatting.baseUrlProblem(apiURLDraft) {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(nsColor: .systemOrange))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ConnectionStatusView(connection: connection)
                 Text(
-                    "The app reads Clankermux's public usage API. Enter a complete HTTP or HTTPS URL above; hostnames and IP addresses are both supported."
+                    "The app reads Clankermux's unauthenticated, read-only status, accounts and workloads endpoints. Hostnames and IP addresses are both accepted; a missing http:// is filled in. The address applies when you press Return or leave the field."
                 )
                 .font(.system(size: 11))
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
@@ -42,7 +74,7 @@ struct SettingsView: View {
 
             Section("Polling") {
                 Stepper(
-                    "Refresh accounts/status every \(preferences.refreshInterval) seconds",
+                    "Refresh accounts and status every \(preferences.refreshInterval) seconds",
                     value: Binding(
                         get: { preferences.refreshInterval },
                         set: { preferences.refreshInterval = $0 }),
@@ -66,32 +98,17 @@ struct SettingsView: View {
                         get: { preferences.menuBarContent },
                         set: { preferences.menuBarContent = $0 })
                 ) {
-                    Text("Icon only").tag(PanelDisplay.icon)
-                    Text("Compact pace bars").tag(PanelDisplay.compact)
-                    Text("Full-size pace bars").tag(PanelDisplay.full)
+                    Text("Stacked pace bars").tag(PanelDisplay.compact)
+                    Text("Weekly usage").tag(PanelDisplay.usage)
                 }
                 .help(
-                    "The icon fits a busy menu bar. Pace bars use more space; macOS may hide an item that does not fit. The popover always shows full detail."
-                )
-                Stepper(
-                    "Width of each full-size pace bar: \(preferences.panelBarWidth) points",
-                    value: Binding(
-                        get: { preferences.panelBarWidth },
-                        set: { preferences.panelBarWidth = $0 }),
-                    in: Preferences.panelBarWidthRange,
-                    step: 2
-                )
-                Toggle(
-                    "Show percentages beside full-size bars",
-                    isOn: Binding(
-                        get: { preferences.showPanelPercentages },
-                        set: { preferences.showPanelPercentages = $0 })
+                    "Stacked pace bars show the server's guidance until the next weekly reset in the narrowest form. Weekly usage averages each provider's weekly percentages with equal weight per account, and needs more room; macOS may hide a status item that does not fit. The popover always shows full detail."
                 )
             }
 
             Section("Popup") {
                 Toggle(
-                    "Show model-specific limits in the panel and popup",
+                    "Show model-family indicators and utilization bars",
                     isOn: Binding(
                         get: { preferences.showScopedLimits },
                         set: { preferences.showScopedLimits = $0 })
@@ -116,10 +133,12 @@ struct SettingsView: View {
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let preferences: Preferences
+    private let connection: ConnectionStatus
     private var window: NSWindow?
 
-    init(preferences: Preferences) {
+    init(preferences: Preferences, connection: ConnectionStatus) {
         self.preferences = preferences
+        self.connection = connection
         super.init()
     }
 
@@ -132,7 +151,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 defer: false
             )
             window.title = "Clankermux Usage Settings"
-            window.contentView = NSHostingView(rootView: SettingsView(preferences: preferences))
+            window.contentView = NSHostingView(
+                rootView: SettingsView(preferences: preferences, connection: connection))
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
