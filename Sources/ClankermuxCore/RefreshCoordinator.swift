@@ -37,11 +37,20 @@ public struct RefreshSnapshot: Sendable, Equatable {
     public let lastWorkloadsError: String
     public let isRefreshing: Bool
     public var workloadsClockReceivedAt: Date? = nil
+    public var accountsGeneratedAt: FlexibleTimestamp? = nil
 
     public func serverNow(localNow: Date) -> Date {
         Formatting.anchoredNow(
             generatedAt: workloads?.generatedAt.instant,
             receivedAt: workloadsClockReceivedAt ?? workloadsReceivedAt, localNow: localNow)
+    }
+
+    /// The clock the `/accounts` reply was generated against, advanced by the time since it
+    /// arrived. Account usage staleness is judged against this and never against the local clock.
+    public func accountsNow(localNow: Date) -> Date {
+        Formatting.anchoredNow(
+            generatedAt: accountsGeneratedAt.instant, receivedAt: accountsReceivedAt,
+            localNow: localNow)
     }
 
     public var lastError: String {
@@ -71,6 +80,7 @@ public actor RefreshCoordinator {
     private var generation = 0
     private var isRefreshing = false
     private var accounts: [Account]?
+    private var accountsGeneratedAt: FlexibleTimestamp?
     private var status: StatusResponse?
     private var workloads: WorkloadsResponse?
     private var accountsReceivedAt: Date?
@@ -117,7 +127,8 @@ public actor RefreshCoordinator {
             workloadsReceivedAt: workloadsReceivedAt, lastSuccess: lastSuccess,
             lastAccountsError: lastAccountsError, lastStatusError: lastStatusError,
             lastWorkloadsError: lastWorkloadsError, isRefreshing: isRefreshing,
-            workloadsClockReceivedAt: workloadsClockReceivedAt)
+            workloadsClockReceivedAt: workloadsClockReceivedAt,
+            accountsGeneratedAt: accountsGeneratedAt)
     }
 
     public func reconfigure(baseURL: String, timeout: TimeInterval) {
@@ -128,6 +139,7 @@ public actor RefreshCoordinator {
         pending = []
         isRefreshing = false
         accounts = nil
+        accountsGeneratedAt = nil
         status = nil
         workloads = nil
         accountsReceivedAt = nil
@@ -225,6 +237,7 @@ public actor RefreshCoordinator {
         switch result {
         case .accounts(let response):
             accounts = response.accounts ?? []
+            accountsGeneratedAt = response.generatedAt
             accountsReceivedAt = receivedAt
             lastAccountsError = ""
         case .status(let response):

@@ -92,7 +92,7 @@ public struct DetailContent: Sendable, Equatable {
             workloads: view.workloads, notices: notices, accounts: view.accounts)
     }
 
-    static func lastRefreshText(lastSuccess: Date?, now: Date) -> String {
+    public static func lastRefreshText(lastSuccess: Date?, now: Date) -> String {
         guard let lastSuccess else { return "Accounts/status refreshed: Never" }
         return
             "Accounts/status refreshed: \(Formatting.formatTimestamp(lastSuccess)) (\(UsageModel.ageText(lastSuccess, now: now)))"

@@ -83,14 +83,16 @@ enum Fixtures {
 
     static func snapshot(
         workloads: WorkloadsResponse? = workloads(), accounts: [Account]? = accounts(),
-        workloadsError: String = "", accountsError: String = ""
+        workloadsError: String = "", accountsError: String = "", receivedAt: Date = now
     ) -> RefreshSnapshot {
         RefreshSnapshot(
             baseURL: "http://clankermux.test:8080", accounts: accounts,
-            status: status(), workloads: workloads, accountsReceivedAt: accounts == nil ? nil : now,
-            statusReceivedAt: now, workloadsReceivedAt: workloads == nil ? nil : now,
-            lastSuccess: now, lastAccountsError: accountsError, lastStatusError: "",
-            lastWorkloadsError: workloadsError, isRefreshing: false)
+            status: status(), workloads: workloads,
+            accountsReceivedAt: accounts == nil ? nil : receivedAt,
+            statusReceivedAt: receivedAt, workloadsReceivedAt: workloads == nil ? nil : receivedAt,
+            lastSuccess: receivedAt, lastAccountsError: accountsError, lastStatusError: "",
+            lastWorkloadsError: workloadsError, isRefreshing: false,
+            accountsGeneratedAt: accounts == nil ? nil : timestamp())
     }
 
     static func json<T: Encodable>(_ value: T) -> String {
