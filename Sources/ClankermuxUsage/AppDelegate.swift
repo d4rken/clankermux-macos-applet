@@ -277,8 +277,12 @@ final class ConnectionStatus: ObservableObject {
             snapshot.lastAccountsError, snapshot.lastStatusError, snapshot.lastWorkloadsError,
         ].filter { !$0.isEmpty }
         let read = snapshot.lastSuccess != nil
+        // A failing endpoint still leaves whatever the others answered on screen, so anything
+        // cached is degraded rather than unavailable.
+        let anyPayload =
+            snapshot.accounts != nil || snapshot.status != nil || snapshot.workloads != nil
         let state: ConnectionState =
-            errors.isEmpty ? (read ? .connected : .connecting) : (read ? .degraded : .failed)
+            errors.isEmpty ? (read ? .connected : .connecting) : (anyPayload ? .degraded : .failed)
 
         var lines: [String] = []
         if state == .connected {
